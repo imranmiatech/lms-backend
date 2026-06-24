@@ -176,86 +176,58 @@ export class AuthService {
     };
   }
 
-  async forgotPassword(email: string) {
-    const normalizedEmail = this.normalizeEmail(email);
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
+async forgotPassword(email: string) {
+  const normalizedEmail = this.normalizeEmail(email);
 
-    if (!user) {
-      return { message: 'If email exists, OTP sent' };
-    }
+  const user = await this.prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
 
-    const cooldownKey = this.getPasswordResetCooldownKey(normalizedEmail);
-    const existingCooldown = await this.redis.get(cooldownKey);
-
-    if (existingCooldown) {
-      return {
-        message: 'OTP already sent. Please wait before requesting again',
-      };
-    }
-
-    // 1. generate 6 digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpHash = await bcrypt.hash(otp, 10);
-
-    // 2. save hashed OTP in Redis with automatic expiry
-    await this.redis.set(
-      this.getPasswordResetOtpKey(normalizedEmail),
-      JSON.stringify({ userId: user.id, otpHash }),
-      PASSWORD_RESET_OTP_TTL_SECONDS,
-    );
-    await this.redis.set(cooldownKey, '1', PASSWORD_RESET_COOLDOWN_SECONDS);
-
-    // 3. send email
-    await this.mailService.sendOtp(normalizedEmail, otp);
-
-    return { message: 'OTP sent to email' };
+  if (!user) {
+    return { message: 'If email exists, OTP sent' };
   }
 
-  async resetPassword(email: string, otp: string, newPassword: string) {
-    const normalizedEmail = this.normalizeEmail(email);
-    const user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
-    });
+  // Generate OTP
+  const otp = Math.floor(
+    100000 + Math.random() * 900000,
+  ).toString();
 
-    if (!user) {
-      throw new BadRequestException('Invalid request');
-    }
+  // Send email
+  await this.mailService.sendOtp(normalizedEmail, otp);
 
-    const otpKey = this.getPasswordResetOtpKey(normalizedEmail);
-    const storedOtp = await this.redis.get(otpKey);
+  return {
+    message: 'OTP sent to email',
+  };
+}
 
-    if (!storedOtp) {
-      throw new BadRequestException('OTP expired or invalid');
-    }
+  async resetPassword(
+  email: string,
+  otp: string,
+  newPassword: string,
+) {
+  const normalizedEmail = this.normalizeEmail(email);
 
-    const otpPayload = this.parsePasswordResetOtp(storedOtp);
+  const user = await this.prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
 
-    if (!otpPayload || otpPayload.userId !== user.id) {
-      throw new BadRequestException('Invalid request');
-    }
-
-    const isOtpMatched = await bcrypt.compare(otp, otpPayload.otpHash);
-
-    if (!isOtpMatched) {
-      throw new BadRequestException('Invalid OTP');
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        password: hashedPassword,
-      },
-    });
-
-    await this.redis.del(otpKey);
-    await this.redis.del(this.getPasswordResetCooldownKey(normalizedEmail));
-
-    return { message: 'Password reset successful' };
+  if (!user) {
+    throw new BadRequestException('User not found');
   }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  await this.prisma.user.update({
+    where: { id: user.id },
+    data: {
+      password: hashedPassword,
+    },
+  });
+
+  return {
+    message: 'Password reset successful',
+  };
+}
 
   async logout(userId: string) {
     await this.prisma.user.update({

@@ -26,6 +26,57 @@ function toMinuteNumber(value: unknown) {
   return match ? Number(match[1]) : Number(value);
 }
 
+function toNumber(value: unknown) {
+  return typeof value === 'string' ? Number(value) : value;
+}
+
+function emptyToUndefined(value: unknown) {
+  return typeof value === 'string' && value.trim() === '' ? undefined : value;
+}
+
+function toStringArray(value: unknown) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : value;
+  } catch {
+    return trimmed
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+}
+
+function toCourseLessons(value: unknown) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : value;
+  } catch {
+    return value;
+  }
+}
+
 export class CreateCourseLessonDto {
   @IsString()
   title!: string;
@@ -62,36 +113,44 @@ export class CreateCourseDto {
   description!: string;
 
   @IsArray()
+  @Transform(({ value }) => toStringArray(value))
   extraInfos!: string[];
 
   @IsArray()
+  @Transform(({ value }) => toStringArray(value))
   topics!: string[];
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => emptyToUndefined(value))
   requirement?: string;
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => emptyToUndefined(value))
   image?: string;
 
   @IsOptional()
   @IsArray()
+  @Transform(({ value }) => toStringArray(value))
   curriculums?: string[];
 
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
+  @Transform(({ value }) => toCourseLessons(value))
   @Type(() => CreateCourseLessonDto)
   curriculumItems?: CreateCourseLessonDto[];
 
   @IsOptional()
   @IsDateString()
+  @Transform(({ value }) => emptyToUndefined(value))
   startDate?: string;
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => emptyToUndefined(value))
   time?: string;
 
   @IsString()
@@ -112,14 +171,17 @@ export class CreateCourseDto {
 
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => toNumber(value))
   pricePerStudent!: number;
 
   @IsNumber()
   @Min(1)
+  @Transform(({ value }) => toNumber(value))
   minStudent!: number;
 
   @IsNumber()
   @Min(1)
+  @Transform(({ value }) => toNumber(value))
   maxStudent!: number;
 
   @IsDateString()

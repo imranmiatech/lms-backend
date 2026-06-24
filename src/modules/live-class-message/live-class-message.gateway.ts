@@ -18,6 +18,7 @@ import {
   LiveClassRoomPayloadDto,
   WsSendLiveClassMessageDto,
   WsShareLiveClassResourceDto,
+  WsPresenceDto,
 } from './dto/live-class-message.dto';
 import { LiveClassMessageService } from './live-class-message.service';
 
@@ -230,6 +231,25 @@ export class LiveClassMessageGateway
     client.to(roomId).emit('live-class:stop-typing', {
       roomId,
       user: this.socketUser(client),
+    });
+  }
+
+  @UseGuards(WsAuthGuard)
+  @SubscribeMessage('live-class:presence')
+  async presence(
+    @ConnectedSocket() client: LiveClassSocket,
+    @MessageBody() payload: WsPresenceDto,
+  ) {
+    const { roomId } =
+      await this.liveClassMessageService.resolveTargetAndAssertAccess(
+        client.user,
+        payload,
+      );
+
+    client.to(roomId).emit('live-class:presence', {
+      roomId,
+      uid: payload.uid,
+      name: payload.name,
     });
   }
 

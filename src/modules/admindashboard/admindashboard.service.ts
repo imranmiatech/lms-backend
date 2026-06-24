@@ -12,7 +12,7 @@ import {
   Role,
 } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
+import { S3StorageService } from '../common/s3/s3.service';
 import {
   combineDateAndTime,
   getTimedClassStatusByDuration,
@@ -69,7 +69,7 @@ type AdminGroupCourse = Prisma.CourseGetPayload<{
 export class AdminDashboardService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly s3StorageService: S3StorageService,
   ) {}
 
   async getAdminProfile(userId: string) {
@@ -114,7 +114,7 @@ export class AdminDashboardService {
     }
 
     const avatarUpload = files?.avatarFile
-      ? await this.cloudinaryService.uploadFile(files.avatarFile, {
+      ? await this.s3StorageService.uploadFile(files.avatarFile, {
           folder: 'daanklerk/admin-profiles',
           resourceType: 'image',
           allowedMimeTypes: [

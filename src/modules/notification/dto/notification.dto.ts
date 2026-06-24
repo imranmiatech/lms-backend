@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -111,7 +111,17 @@ export class NotificationQueryDto {
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === true || value === 'true' || value === '1') {
+      return true;
+    }
+
+    if (value === false || value === 'false' || value === '0') {
+      return false;
+    }
+
+    return value;
+  })
   @IsBoolean()
   isRead?: boolean;
 

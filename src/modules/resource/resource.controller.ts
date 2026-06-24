@@ -43,7 +43,7 @@ export class ResourceController {
     }),
   )
   @ApiOperation({ summary: 'Create a new resource (Tutor/Admin only)' })
-  @ApiConsumes('application/json', 'multipart/form-data')
+  @ApiConsumes('multipart/form-data')
   @ApiBody({
     required: false,
     schema: {
@@ -64,7 +64,7 @@ export class ResourceController {
         file: {
           type: 'string',
           format: 'binary',
-          description: 'Optional PDF/document file. If sent, url is saved as Cloudinary URL.',
+          description: 'Optional image or document file. If sent, url is saved as an S3 URL.',
         },
       },
     },
@@ -100,7 +100,7 @@ export class ResourceController {
     }),
   )
   @ApiOperation({ summary: 'Update a resource (Tutor/Admin only)' })
-  @ApiConsumes('application/json', 'multipart/form-data')
+  @ApiConsumes('multipart/form-data')
   @ApiBody({
     required: false,
     schema: {
@@ -117,7 +117,7 @@ export class ResourceController {
         file: {
           type: 'string',
           format: 'binary',
-          description: 'Optional PDF/document file. If sent, url is updated with Cloudinary URL.',
+          description: 'Optional image or document file. If sent, url is updated with an S3 URL.',
         },
       },
     },

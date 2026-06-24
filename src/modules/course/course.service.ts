@@ -14,6 +14,7 @@ import {
 import { randomUUID } from 'crypto';
 import Stripe = require('stripe');
 import { PrismaService } from 'src/prisma/prisma.service';
+import { S3StorageService } from '../common/s3/s3.service';
 import {
   CoursePriceFilter,
   CourseSubjectFilter,
@@ -61,7 +62,10 @@ type EnrollmentRow = {
 export class CourseService {
   private readonly stripe?: Stripe.Stripe;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly s3StorageService: S3StorageService,
+  ) {
     const secretKey = process.env.STRIPE_SECRET_KEY;
 
     if (secretKey) {
@@ -69,7 +73,7 @@ export class CourseService {
     }
   }
 
-  async createCourse(tutorId: string, dto: CreateCourseDto) {
+  async createCourse(tutorId: string, dto: CreateCourseDto, imageFile?: any) {
     const isTutor = await this.prisma.user.findFirst({
       where: {
         id: tutorId,
@@ -91,9 +95,11 @@ export class CourseService {
 
     const curriculumItems = this.normalizeCourseLessons(dto);
     const { curriculumItems: _curriculumItems, ...courseDto } = dto;
+    const image = await this.uploadCourseImage(dto.image, imageFile);
     const course = await this.prisma.course.create({
       data: {
         ...courseDto,
+        ...(image !== undefined && { image }),
         curriculums: this.getCourseCurriculums(dto, curriculumItems),
         startDate: new Date(dto.startDate ?? curriculumItems[0].date),
         time: dto.time ?? curriculumItems[0].time,
@@ -184,12 +190,14 @@ export class CourseService {
       ? this.normalizeCourseLessons(dto)
       : null;
     const { curriculumItems: _curriculumItems, ...courseDto } = dto;
+    const image = await this.uploadCourseImage(dto.image);
     const updatedCourse = await this.prisma.course.update({
       where: {
         id: courseId,
       },
       data: {
         ...courseDto,
+        ...(image !== undefined && { image }),
         ...(curriculumItems && {
           curriculums: this.getCourseCurriculums(dto, curriculumItems),
           startDate: new Date(dto.startDate ?? curriculumItems[0].date),
@@ -667,6 +675,68 @@ export class CourseService {
     } satisfies Prisma.CourseInclude;
   }
 
+  private async uploadCourseImage(image?: string, imageFile?: any) {
+    if (imageFile) {
+      return this.uploadCourseImageFile(imageFile);
+    }
+
+    if (!image || !image.startsWith('data:')) {
+      return image;
+    }
+
+    const file = this.dataUrlToFile(image);
+    return this.uploadCourseImageFile(file);
+  }
+
+  private async uploadCourseImageFile(file: any) {
+    const upload = await this.s3StorageService.uploadFile(file, {
+      folder: 'daanklerk/courses',
+      resourceType: 'image',
+      allowedMimeTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+      ],
+      maxBytes: 10 * 1024 * 1024,
+    });
+
+    return upload.url;
+  }
+
+  private dataUrlToFile(dataUrl: string) {
+    const match = dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
+
+    if (!match) {
+      throw new BadRequestException('Invalid course image data URL');
+    }
+
+    const [, mimetype, base64] = match;
+    const buffer = Buffer.from(base64, 'base64');
+
+    if (!buffer.length) {
+      throw new BadRequestException('Invalid course image data');
+    }
+
+    return {
+      buffer,
+      mimetype,
+      size: buffer.length,
+      originalname: `course-image.${this.getImageExtension(mimetype)}`,
+    };
+  }
+
+  private getImageExtension(mimetype: string) {
+    const extensions: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+    };
+
+    return extensions[mimetype] ?? 'png';
+  }
+
   private async assertTutorCourse(courseId: string, tutorId: string) {
     const course = await this.prisma.course.findUnique({
       where: {
@@ -737,12 +807,12 @@ export class CourseService {
   private normalizeCourseLessons(
     dto: CreateCourseDto,
   ): CreateCourseLessonDto[] {
-    if (dto.curriculumItems?.length) {
-      return dto.curriculumItems.map((item) => ({
-        title: item.title,
-        date: item.date,
-        time: item.time,
-      }));
+    const validCurriculumItems = this.getValidCurriculumItems(
+      dto.curriculumItems,
+    );
+
+    if (validCurriculumItems.length) {
+      return validCurriculumItems;
     }
 
     if (!dto.curriculums?.length) {
@@ -767,6 +837,31 @@ export class CourseService {
         time: dto.time as string,
       };
     });
+  }
+
+  private getValidCurriculumItems(curriculumItems?: CreateCourseLessonDto[]) {
+    if (!Array.isArray(curriculumItems)) {
+      return [];
+    }
+
+    return curriculumItems
+      .filter((item) => {
+        if (!item || typeof item !== 'object') {
+          return false;
+        }
+
+        return Boolean(
+          item.title &&
+            item.date &&
+            !Number.isNaN(new Date(item.date).getTime()) &&
+            item.time,
+        );
+      })
+      .map((item) => ({
+        title: item.title,
+        date: item.date,
+        time: item.time,
+      }));
   }
 
   private getCourseCurriculums(

@@ -5,14 +5,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
+import { S3StorageService } from '../common/s3/s3.service';
 import { CreateResourceDto, UpdateResourceDto } from './dto/resource.dto';
 
 @Injectable()
 export class ResourceService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly s3StorageService: S3StorageService,
   ) {}
 
   async createResource(tutorId: string, dto: CreateResourceDto, file?: any) {
@@ -141,16 +141,24 @@ export class ResourceService {
   }
 
   private uploadResourceFile(file: any) {
-    return this.cloudinaryService.uploadFile(file, {
+    return this.s3StorageService.uploadFile(file, {
       folder: 'daanklerk/resources',
-      resourceType: 'raw',
+      resourceType: 'auto',
       allowedMimeTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'image/svg+xml',
         'application/pdf',
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'text/plain',
+        'text/csv',
       ],
       maxBytes: 20 * 1024 * 1024,
     });

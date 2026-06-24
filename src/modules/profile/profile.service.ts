@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ApplicationStatus, DayOfWeek } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
+import { S3StorageService } from '../common/s3/s3.service';
 import {
   AvailabilityDto,
   CreateProfileDto,
@@ -16,7 +16,7 @@ import {
 export class ProfileService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly s3StorageService: S3StorageService,
   ) {}
 
   async createProfile(
@@ -164,7 +164,7 @@ export class ProfileService {
   }
 
   async getProfile(userId: string) {
-    const [profile, completedCourses] = await this.prisma.$transaction([
+    const [profile, completedCourses] = await Promise.all([
       this.prisma.userProfile.findUnique({
         where: { userId },
         include: this.profileInclude(),
@@ -289,7 +289,7 @@ export class ProfileService {
   private async uploadProfileFiles(files?: { avatarFile?: any; videoFile?: any }) {
     const [avatarUpload, videoUpload] = await Promise.all([
       files?.avatarFile
-        ? this.cloudinaryService.uploadFile(files.avatarFile, {
+        ? this.s3StorageService.uploadFile(files.avatarFile, {
             folder: 'daanklerk/profiles',
             resourceType: 'image',
             allowedMimeTypes: [
@@ -302,7 +302,7 @@ export class ProfileService {
           })
         : Promise.resolve(null),
       files?.videoFile
-        ? this.cloudinaryService.uploadFile(files.videoFile, {
+        ? this.s3StorageService.uploadFile(files.videoFile, {
             folder: 'daanklerk/profile-videos',
             resourceType: 'video',
             allowedMimeTypes: [

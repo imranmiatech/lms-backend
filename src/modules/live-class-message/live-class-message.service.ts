@@ -18,7 +18,7 @@ import {
   ShareLiveClassResourceUploadDto,
   WsShareLiveClassResourceDto,
 } from './dto/live-class-message.dto';
-import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
+import { S3StorageService } from '../common/s3/s3.service';
 
 type CurrentUser = {
   userId: string;
@@ -50,7 +50,7 @@ const MESSAGE_TYPE = {
 export class LiveClassMessageService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly s3StorageService: S3StorageService,
   ) {}
 
   async getGroupMessages(
@@ -302,7 +302,7 @@ export class LiveClassMessageService {
   }
 
   private uploadLiveClassResourceFile(file: any) {
-    return this.cloudinaryService.uploadFile(file, {
+    return this.s3StorageService.uploadFile(file, {
       folder: 'daanklerk/live-class-resources',
       resourceType: 'auto',
       allowedMimeTypes: [

@@ -1,11 +1,12 @@
 import {
   IsBoolean,
+  IsEmail,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
 
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreatePaymentDto {
   @ApiProperty({
@@ -151,4 +152,43 @@ export class UpdateNotificationPreferencesDto {
   @IsOptional()
   @IsBoolean()
   notifyWeeklyDigest?: boolean;
+}
+
+export class UpsertLegalContentDto {
+  @ApiPropertyOptional({
+    example: 'Privacy policy content...',
+  })
+  @IsOptional()
+  @IsString()
+  privacyPolicy?: string;
+
+  @ApiPropertyOptional({
+    example: 'Terms and conditions content...',
+  })
+  @IsOptional()
+  @IsString()
+  termsAndConditions?: string;
+}
+
+export class UpsertPlatformSettingsDto {
+  @ApiPropertyOptional({
+    example: 'Braens',
+  })
+  @IsOptional()
+  @IsString()
+  platformName?: string;
+
+  @ApiPropertyOptional({
+    example: 'ia.turjo18@gmail.com',
+  })
+  @IsOptional()
+  @IsEmail()
+  contactEmail?: string;
+
+  @ApiPropertyOptional({
+    example: 'Atlanta, CA, USA',
+  })
+  @IsOptional()
+  @IsString()
+  location?: string;
 }

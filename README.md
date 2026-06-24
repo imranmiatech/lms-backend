@@ -25,6 +25,21 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## File Storage
+
+Uploaded profile avatars, profile videos, admin avatars, tutor resources, and live-class resources are stored in S3 through `S3StorageService`.
+
+Required environment variables:
+
+```env
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_S3_BUCKET=your_s3_bucket_name
+```
+
+Optional URL/compatibility variables: `AWS_S3_PUBLIC_BASE_URL`, `AWS_CLOUDFRONT_URL`, `AWS_S3_OBJECT_ACL`, `AWS_S3_ENDPOINT`, and `AWS_S3_FORCE_PATH_STYLE`.
+
 ## Database Schema
 
 The application database is defined with Prisma under `prisma/schema.prisma` and `prisma/models/*.prisma`.

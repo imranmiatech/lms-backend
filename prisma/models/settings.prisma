@@ -16,3 +16,20 @@ model PaymentInformation {
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model PlatformLegalContent {
+  id                 String   @id
+  privacyPolicy      String?
+  termsAndConditions String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model PlatformSetting {
+  id           String   @id
+  platformName String?
+  contactEmail String?
+  location     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

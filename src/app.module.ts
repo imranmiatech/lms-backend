@@ -6,7 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { MailModule } from './modules/common/mail/mail.module';
-import { CloudinaryModule } from './modules/common/cloudinary/cloudinary.module';
+import { S3StorageModule } from './modules/common/s3/s3.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { CourseModule } from './modules/course/course.module';
 import { ResourceModule } from './modules/resource/resource.module';
@@ -24,13 +24,14 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { AgoraModule } from './modules/agora/agora.module';
 import { StudentLessonsModule } from './modules/student-lessons/student-lessons.module';
 import { LiveClassMessageModule } from './modules/live-class-message/live-class-message.module';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     RedisModule,
-    CloudinaryModule,
+    S3StorageModule,
     AuthModule,
     UsersModule,
     MailModule,
@@ -50,6 +51,7 @@ import { LiveClassMessageModule } from './modules/live-class-message/live-class-
     AgoraModule,
     StudentLessonsModule,
     LiveClassMessageModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService],

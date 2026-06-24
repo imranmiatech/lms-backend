@@ -8,14 +8,20 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
+  ApiBody,
   ApiBearerAuth,
+  ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { Role } from '@prisma/client';
 import { CurrentUser, Roles } from '../auth/decorators/roles.decorator';
 import { AuthGuard } from '../auth/guards/auth.guard';
@@ -36,15 +42,98 @@ export class CourseController {
   @UseGuards(AuthGuard)
   @Roles(Role.TUTOR, Role.ADMIN)
   @ApiBearerAuth()
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
   @ApiOperation({ summary: 'Create a new course (Tutor/Admin only)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description:
+      'Create a course with multipart/form-data. Upload image to store the course image in S3.',
+    schema: {
+      type: 'object',
+      required: [
+        'title',
+        'category',
+        'description',
+        'extraInfos',
+        'topics',
+        'timeZone',
+        'classDuration',
+        'language',
+        'courseDuration',
+        'pricePerStudent',
+        'minStudent',
+        'maxStudent',
+        'enrollmentDeadline',
+      ],
+      properties: {
+        title: { type: 'string', example: 'Advanced Python Programming' },
+        category: { type: 'string', example: 'Programming' },
+        description: {
+          type: 'string',
+          example: 'Learn advanced Python through live classes.',
+        },
+        extraInfos: {
+          type: 'string',
+          example:
+            '["8 live sessions per week","Certificate of completion"]',
+          description: 'JSON array string or comma-separated text.',
+        },
+        topics: {
+          type: 'string',
+          example: '["Python","OOP","Django"]',
+          description: 'JSON array string or comma-separated text.',
+        },
+        requirement: { type: 'string', example: 'Basic Python knowledge' },
+        image: {
+          type: 'string',
+          format: 'binary',
+          description:
+            'Optional course image file. Supported: JPEG, PNG, WebP, GIF. Max 10MB. Uploaded to S3.',
+        },
+        curriculums: {
+          type: 'string',
+          example: '["Introduction","Advanced Patterns"]',
+          description:
+            'JSON array string or comma-separated text. Use with startDate and time.',
+        },
+        curriculumItems: {
+          type: 'string',
+          example:
+            '[{"title":"Introduction","date":"2026-07-06","time":"14:00"}]',
+          description:
+            'JSON array string of lesson objects. Preferred for per-lesson date/time.',
+        },
+        startDate: { type: 'string', example: '2026-07-06' },
+        time: { type: 'string', example: '14:00' },
+        timeZone: { type: 'string', example: 'UTC-5 (EST)' },
+        classDuration: { type: 'number', example: 45 },
+        language: { type: 'string', example: 'English' },
+        courseDuration: { type: 'number', example: 8 },
+        pricePerStudent: { type: 'number', example: 210 },
+        minStudent: { type: 'number', example: 1 },
+        maxStudent: { type: 'number', example: 20 },
+        enrollmentDeadline: { type: 'string', example: '2026-07-01' },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Course created successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
   createCourse(
     @Body() createCourseDto: CreateCourseDto,
     @CurrentUser() user: { userId: string },
+    @UploadedFile() image?: any,
   ) {
-    return this.courseService.createCourse(user.userId, createCourseDto);
+    return this.courseService.createCourse(
+      user.userId,
+      createCourseDto,
+      image,
+    );
   }
 
   @Get('upcoming')

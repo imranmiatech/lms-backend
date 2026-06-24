@@ -132,3 +132,15 @@ export class WsShareLiveClassResourceDto extends LiveClassRoomPayloadDto {
   @IsString()
   content?: string;
 }
+
+export class WsPresenceDto extends LiveClassRoomPayloadDto {
+  @ApiProperty({ example: 12345678 })
+  @IsNotEmpty()
+  @IsInt()
+  uid!: number;
+
+  @ApiProperty({ example: 'John Doe' })
+  @IsNotEmpty()
+  @IsString()
+  name!: string;
+}

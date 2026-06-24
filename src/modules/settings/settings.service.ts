@@ -5,9 +5,15 @@ import {
     CreatePaymentDto,
     UpdateNotificationPreferencesDto,
     UpdateSettingsDto,
+    UpsertLegalContentDto,
+    UpsertPlatformSettingsDto,
 } from './dto/settings.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from "bcrypt";
+
+const LEGAL_CONTENT_ID = 'platform_legal_content';
+const PLATFORM_SETTINGS_ID = 'platform_settings';
+
 @Injectable()
 export class SettingsService {
     constructor(private prisma: PrismaService) { }
@@ -217,6 +223,131 @@ export class SettingsService {
             success: true,
             message: 'Notification preferences updated successfully',
             data: preferences,
+        };
+    }
+
+    async upsertLegalContent(dto: UpsertLegalContentDto) {
+        const content = await this.prisma.platformLegalContent.upsert({
+            where: {
+                id: LEGAL_CONTENT_ID,
+            },
+            update: {
+                ...(dto.privacyPolicy !== undefined && {
+                    privacyPolicy: dto.privacyPolicy,
+                }),
+                ...(dto.termsAndConditions !== undefined && {
+                    termsAndConditions: dto.termsAndConditions,
+                }),
+            },
+            create: {
+                id: LEGAL_CONTENT_ID,
+                privacyPolicy: dto.privacyPolicy,
+                termsAndConditions: dto.termsAndConditions,
+            },
+        });
+
+        return {
+            success: true,
+            message: 'Legal content saved successfully',
+            data: content,
+        };
+    }
+
+    async upsertPlatformSettings(dto: UpsertPlatformSettingsDto) {
+        const settings = await this.prisma.platformSetting.upsert({
+            where: {
+                id: PLATFORM_SETTINGS_ID,
+            },
+            update: {
+                ...(dto.platformName !== undefined && {
+                    platformName: dto.platformName,
+                }),
+                ...(dto.contactEmail !== undefined && {
+                    contactEmail: dto.contactEmail,
+                }),
+                ...(dto.location !== undefined && {
+                    location: dto.location,
+                }),
+            },
+            create: {
+                id: PLATFORM_SETTINGS_ID,
+                platformName: dto.platformName,
+                contactEmail: dto.contactEmail,
+                location: dto.location,
+            },
+        });
+
+        return {
+            success: true,
+            message: 'Platform settings saved successfully',
+            data: settings,
+        };
+    }
+
+    async getPlatformSettings() {
+        const settings = await this.prisma.platformSetting.findUnique({
+            where: {
+                id: PLATFORM_SETTINGS_ID,
+            },
+        });
+
+        return {
+            success: true,
+            data: settings ?? {
+                id: PLATFORM_SETTINGS_ID,
+                platformName: null,
+                contactEmail: null,
+                location: null,
+                createdAt: null,
+                updatedAt: null,
+            },
+        };
+    }
+
+    async getLegalContent() {
+        const content = await this.findLegalContent();
+
+        return {
+            success: true,
+            data: content,
+        };
+    }
+
+    async getPrivacyPolicy() {
+        const content = await this.findLegalContent();
+
+        return {
+            success: true,
+            data: {
+                privacyPolicy: content.privacyPolicy,
+            },
+        };
+    }
+
+    async getTermsAndConditions() {
+        const content = await this.findLegalContent();
+
+        return {
+            success: true,
+            data: {
+                termsAndConditions: content.termsAndConditions,
+            },
+        };
+    }
+
+    private async findLegalContent() {
+        const content = await this.prisma.platformLegalContent.findUnique({
+            where: {
+                id: LEGAL_CONTENT_ID,
+            },
+        });
+
+        return content ?? {
+            id: LEGAL_CONTENT_ID,
+            privacyPolicy: null,
+            termsAndConditions: null,
+            createdAt: null,
+            updatedAt: null,
         };
     }
 

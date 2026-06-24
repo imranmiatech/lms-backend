@@ -3,26 +3,21 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --ignore-scripts        # skip postinstall here
+RUN npm ci --ignore-scripts
 
 COPY . .
-RUN npx prisma generate            # schema is now present
+RUN npx prisma generate
 RUN npm run build
 
 FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
-
-RUN npm ci --omit=dev --ignore-scripts   # skip postinstall here too
-RUN npx prisma generate                  # schema is present
-
+COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/dist ./dist
-COPY docker-entrypoint.sh .
-RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 3000
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]

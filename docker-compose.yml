@@ -1,38 +1,20 @@
-version: '3.8'
-
 services:
   daanclerk-backend:
     container_name: daanclerk-backend
-    build:
-      context: .
-      dockerfile: Dockerfile
     restart: unless-stopped
-    image: softvence/daanclerk-backend:latest
+    image: "${{DOCKER_USER}}/daanclerk-backend:latest"
     platform: linux/amd64
     ports:
-      # Exposed internally to the Docker network but not publicly mapped to host
-      - "3000"
-    environment:
-      - PORT=3000
-      - NODE_ENV=${NODE_ENV:-production}
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-      - EMAIL_HOST=${EMAIL_HOST}
-      - EMAIL_PORT=${EMAIL_PORT}
-      - EMAIL_USER=${EMAIL_USER}
-      - EMAIL_PASS=${EMAIL_PASS}
-      - EMAIL_FROM=${EMAIL_FROM}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - FRONTEND_URL=${FRONTEND_URL}
+      - "3000:3000"
+    env_file:
+      - .env
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 1024M
         reservations:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 256M
     logging:
       driver: "json-file"
@@ -40,7 +22,15 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/health",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

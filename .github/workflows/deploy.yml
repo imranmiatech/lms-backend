@@ -33,7 +33,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: ubuntu
+          username: admin
           key: ${{ secrets.VPS_ACCESS_KEY }}
           script: |
             cd /home/admin/braens_backend

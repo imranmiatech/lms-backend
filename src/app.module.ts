@@ -25,6 +25,7 @@ import { AgoraModule } from './modules/agora/agora.module';
 import { StudentLessonsModule } from './modules/student-lessons/student-lessons.module';
 import { LiveClassMessageModule } from './modules/live-class-message/live-class-message.module';
 import { UploadModule } from './modules/upload/upload.module';
+import { NewsletterModule } from './modules/newsletter/newsletter.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { UploadModule } from './modules/upload/upload.module';
     StudentLessonsModule,
     LiveClassMessageModule,
     UploadModule,
+    NewsletterModule,
   ],
   controllers: [AppController],
   providers: [AppService],

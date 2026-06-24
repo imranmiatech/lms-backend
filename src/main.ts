@@ -54,9 +54,11 @@ async function bootstrap() {
       ...configuredOrigins,
       'https://braens.vercel.app',
       'http://localhost:5173',
-      'http://localhost:5174',
-     
-
+      'https://braens.eu',
+      'https://onset-depletion-vanity.ngrok-free.dev',
+      'http://127.0.0.1:5500',
+      'http://localhost:5501',
+      'http://127.0.0.1:5501',
     ]),
   );
 

@@ -1,56 +1,28 @@
-# --- Stage 1: Dependencies ---
-FROM node:22-alpine AS deps
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
-
-# Copy package configurations
-COPY package.json package-lock.json ./
-# Copy prisma schema to generate client
-COPY prisma ./prisma
-
-# Install dependencies and generate Prisma client
-RUN npm ci
-
-# --- Stage 2: Builder ---
 FROM node:22-alpine AS builder
+
 WORKDIR /app
 
-# Copy dependency tree and source code
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY package*.json ./
+RUN npm ci --ignore-scripts        # skip postinstall here
 
-# Build the NestJS application
+COPY . .
+RUN npx prisma generate            # schema is now present
 RUN npm run build
 
-# Prune dev dependencies to minimize final image footprint
-RUN npm prune --omit=dev
+FROM node:22-alpine
 
-# --- Stage 3: Production Runner ---
-FROM node:22-alpine AS runner
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV PORT=3000
+COPY package*.json ./
+COPY --from=builder /app/prisma ./prisma
 
-# Create secure system group and user, assign ownership
-RUN mkdir -p /app && chown -R node:node /app
+RUN npm ci --omit=dev --ignore-scripts   # skip postinstall here too
+RUN npx prisma generate                  # schema is present
 
-# Switch to non-root user
-USER node
+COPY --from=builder /app/dist ./dist
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh
 
-# Copy build artifacts and pruned dependencies
-COPY --from=builder --chown=node:node /app/dist ./dist
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
-COPY --from=builder --chown=node:node /app/package.json ./package.json
-# Prisma engines and schema required at runtime for migrations/queries
-COPY --from=builder --chown=node:node /app/prisma ./prisma
-
-# Expose NestJS port
 EXPOSE 3000
 
-# Configure healthcheck using wget (pre-installed in Alpine)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
-
-# Run pending Prisma migrations before starting the API.
-CMD ["npm", "run", "start:prod"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

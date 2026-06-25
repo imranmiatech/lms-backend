@@ -111,8 +111,9 @@ export class PaymentController {
         summary: 'Private tutor booking payment',
         value: {
           tutorId: 'tutor_albert_flores',
-          sessionCount: 2,
-          scheduledAt: '2026-06-18T15:00:00.000Z',
+          scheduledDate: '2026-06-25',
+          scheduledTime: '14:00',
+          durationMinutes: 60,
         },
       },
     },
@@ -183,7 +184,9 @@ export class PaymentController {
           'Use this when a student books a tutor individually from the tutor list.',
         value: {
           tutorId: 'tutor_albert_flores',
-          sessionCount: 2,
+          scheduledDate: '2026-06-25',
+          scheduledTime: '14:00',
+          durationMinutes: 60,
         },
       },
     },

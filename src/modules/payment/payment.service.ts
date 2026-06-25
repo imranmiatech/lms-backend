@@ -7,6 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import {
+  DayOfWeek,
   PaymentStatus,
   PaymentType,
   PayoutStatus,
@@ -16,7 +17,11 @@ import {
 import Stripe = require('stripe');
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AgoraService } from '../agora/agora.service';
-import { getTimedClassStatus } from '../common/time/lesson-status.util';
+import {
+  combineDateAndTime,
+  getTimedClassStatus,
+  parseClockTime,
+} from '../common/time/lesson-status.util';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationAudience } from '../notification/dto/notification.dto';
 import {
@@ -272,6 +277,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
           select: {
             pricePerHour: true,
             sessionDuration: true,
+            availability: true,
           },
         },
       },
@@ -287,30 +293,36 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Tutor private session price is not set');
     }
 
-    const sessionCount = dto.sessionCount ?? 1;
     const sessionDuration = tutor.profile?.sessionDuration ?? 60;
-    const durationMinutes = sessionCount * sessionDuration;
-    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+    const schedule = this.resolvePrivateLessonSchedule(dto, {
+      sessionDuration,
+      availability: tutor.profile?.availability ?? [],
+    });
+    const amount = Number(
+      ((pricePerHour * schedule.durationMinutes) / 60).toFixed(2),
+    );
 
-    if (scheduledAt && Number.isNaN(scheduledAt.getTime())) {
-      throw new BadRequestException('scheduledAt must be a valid date');
-    }
-
-    const amount = pricePerHour * sessionCount;
-
-    const payment = await this.prisma.payment.create({
-      data: {
-        userId,
+    const payment = await this.prisma.$transaction(async (tx) => {
+      await this.assertPrivateLessonSlotAvailable(tx, {
         tutorId: tutor.id,
-        amount,
-        currency: 'usd',
-        status: PaymentStatus.PENDING,
-        type: PaymentType.PRIVATE,
-        payoutStatus: PayoutStatus.PENDING,
-        privateLessonStartsAt: scheduledAt,
-        privateLessonDuration: durationMinutes,
-        privateLessonSessions: sessionCount,
-      },
+        startsAt: schedule.startsAt,
+        endsAt: schedule.endsAt,
+      });
+
+      return tx.payment.create({
+        data: {
+          userId,
+          tutorId: tutor.id,
+          amount,
+          currency: 'usd',
+          status: PaymentStatus.PENDING,
+          type: PaymentType.PRIVATE,
+          payoutStatus: PayoutStatus.PENDING,
+          privateLessonStartsAt: schedule.startsAt,
+          privateLessonDuration: schedule.durationMinutes,
+          privateLessonSessions: schedule.sessionCount,
+        },
+      });
     });
 
     const frontendUrl = this.getFrontendUrl();
@@ -335,9 +347,9 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         tutorId: tutor.id,
         userId,
         type: PaymentType.PRIVATE,
-        sessionCount: String(sessionCount),
-        durationMinutes: String(durationMinutes),
-        ...(scheduledAt && { scheduledAt: scheduledAt.toISOString() }),
+        sessionCount: String(schedule.sessionCount),
+        durationMinutes: String(schedule.durationMinutes),
+        scheduledAt: schedule.startsAt.toISOString(),
       },
       success_url: `${backendUrl}/payment/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontendUrl}/payment/cancel`,
@@ -356,6 +368,293 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         sessionId: session.id,
         url: session.url,
       },
+    };
+  }
+
+  private resolvePrivateLessonSchedule(
+    dto: CreatePrivateBookingCheckoutSessionDto,
+    tutorProfile: {
+      sessionDuration: number;
+      availability: {
+        dayOfWeek: DayOfWeek;
+        startTime: string;
+        endTime: string;
+        timezone: string | null;
+      }[];
+    },
+  ) {
+    const durationMinutes =
+      dto.durationMinutes ??
+      (dto.sessionCount ?? 1) * tutorProfile.sessionDuration;
+    const sessionCount = Math.max(
+      1,
+      Math.ceil(durationMinutes / tutorProfile.sessionDuration),
+    );
+
+    if (durationMinutes <= 0) {
+      throw new BadRequestException('durationMinutes must be greater than 0');
+    }
+
+    if (!tutorProfile.availability.length) {
+      throw new BadRequestException('Tutor has no availability');
+    }
+
+    const scheduledByParts = dto.scheduledDate || dto.scheduledTime;
+
+    if (scheduledByParts) {
+      if (!dto.scheduledDate || !dto.scheduledTime) {
+        throw new BadRequestException(
+          'scheduledDate and scheduledTime are required together',
+        );
+      }
+
+      return this.resolvePrivateLessonScheduleFromParts(
+        dto.scheduledDate,
+        dto.scheduledTime,
+        durationMinutes,
+        sessionCount,
+        tutorProfile.availability,
+      );
+    }
+
+    if (!dto.scheduledAt) {
+      throw new BadRequestException(
+        'Private booking requires scheduledDate and scheduledTime',
+      );
+    }
+
+    const startsAt = new Date(dto.scheduledAt);
+
+    if (Number.isNaN(startsAt.getTime())) {
+      throw new BadRequestException('scheduledAt must be a valid date');
+    }
+
+    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+
+    if (!this.isInsideAnyAvailability(startsAt, endsAt, tutorProfile.availability)) {
+      throw new BadRequestException(
+        'Selected time is outside tutor availability',
+      );
+    }
+
+    this.assertFuturePrivateLesson(startsAt);
+
+    return {
+      startsAt,
+      endsAt,
+      durationMinutes,
+      sessionCount,
+    };
+  }
+
+  private resolvePrivateLessonScheduleFromParts(
+    scheduledDate: string,
+    scheduledTime: string,
+    durationMinutes: number,
+    sessionCount: number,
+    availability: {
+      dayOfWeek: DayOfWeek;
+      startTime: string;
+      endTime: string;
+      timezone: string | null;
+    }[],
+  ) {
+    const parsedTime = parseClockTime(scheduledTime);
+
+    if (!parsedTime) {
+      throw new BadRequestException('scheduledTime must be a valid time');
+    }
+
+    const dayOfWeek = this.getDayOfWeekFromDateString(scheduledDate);
+    const requestedStartMinute = parsedTime.totalMinutes;
+    const requestedEndMinute = requestedStartMinute + durationMinutes;
+    const matchingAvailability = availability.find((item) => {
+      if (item.dayOfWeek !== dayOfWeek) {
+        return false;
+      }
+
+      const start = parseClockTime(item.startTime);
+      const end = parseClockTime(item.endTime);
+
+      if (!start || !end) {
+        return false;
+      }
+
+      return (
+        requestedStartMinute >= start.totalMinutes &&
+        requestedEndMinute <= end.totalMinutes
+      );
+    });
+
+    if (!matchingAvailability) {
+      throw new BadRequestException(
+        'Selected time is outside tutor availability',
+      );
+    }
+
+    const startsAt = combineDateAndTime(
+      new Date(`${scheduledDate}T00:00:00.000Z`),
+      scheduledTime,
+      matchingAvailability.timezone,
+    );
+    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+
+    this.assertFuturePrivateLesson(startsAt);
+
+    return {
+      startsAt,
+      endsAt,
+      durationMinutes,
+      sessionCount,
+    };
+  }
+
+  private async assertPrivateLessonSlotAvailable(
+    tx: Prisma.TransactionClient,
+    input: {
+      tutorId: string;
+      startsAt: Date;
+      endsAt: Date;
+    },
+  ) {
+    const candidateBookings = await tx.payment.findMany({
+      where: {
+        tutorId: input.tutorId,
+        type: PaymentType.PRIVATE,
+        status: {
+          in: [PaymentStatus.PENDING, PaymentStatus.PAID],
+        },
+        privateLessonStartsAt: {
+          lt: input.endsAt,
+        },
+      },
+      select: {
+        id: true,
+        privateLessonStartsAt: true,
+        privateLessonDuration: true,
+      },
+    });
+
+    const overlappingBooking = candidateBookings.find((booking) => {
+      if (!booking.privateLessonStartsAt) {
+        return false;
+      }
+
+      const bookingEndsAt = new Date(
+        booking.privateLessonStartsAt.getTime() +
+          (booking.privateLessonDuration ?? 60) * 60 * 1000,
+      );
+
+      return bookingEndsAt > input.startsAt;
+    });
+
+    if (overlappingBooking) {
+      throw new BadRequestException(
+        'Tutor is already booked for the selected time',
+      );
+    }
+  }
+
+  private isInsideAnyAvailability(
+    startsAt: Date,
+    endsAt: Date,
+    availability: {
+      dayOfWeek: DayOfWeek;
+      startTime: string;
+      endTime: string;
+      timezone: string | null;
+    }[],
+  ) {
+    return availability.some((item) => {
+      const timezone = item.timezone ?? 'UTC';
+      const startParts = this.getDatePartsInTimeZone(startsAt, timezone);
+      const endParts = this.getDatePartsInTimeZone(endsAt, timezone);
+
+      if (
+        startParts.year !== endParts.year ||
+        startParts.month !== endParts.month ||
+        startParts.day !== endParts.day
+      ) {
+        return false;
+      }
+
+      if (item.dayOfWeek !== this.getDayOfWeekFromParts(startParts)) {
+        return false;
+      }
+
+      const availableStart = parseClockTime(item.startTime);
+      const availableEnd = parseClockTime(item.endTime);
+
+      if (!availableStart || !availableEnd) {
+        return false;
+      }
+
+      const startMinute = startParts.hours * 60 + startParts.minutes;
+      const endMinute = endParts.hours * 60 + endParts.minutes;
+
+      return (
+        startMinute >= availableStart.totalMinutes &&
+        endMinute <= availableEnd.totalMinutes
+      );
+    });
+  }
+
+  private assertFuturePrivateLesson(startsAt: Date) {
+    if (startsAt <= new Date()) {
+      throw new BadRequestException('Private lesson time must be in the future');
+    }
+  }
+
+  private getDayOfWeekFromDateString(date: string) {
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new BadRequestException('scheduledDate must be a valid date');
+    }
+
+    return this.dayIndexToDayOfWeek(parsedDate.getUTCDay());
+  }
+
+  private getDayOfWeekFromParts(parts: { year: number; month: number; day: number }) {
+    return this.dayIndexToDayOfWeek(
+      new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay(),
+    );
+  }
+
+  private dayIndexToDayOfWeek(dayIndex: number) {
+    const days: DayOfWeek[] = [
+      DayOfWeek.SUNDAY,
+      DayOfWeek.MONDAY,
+      DayOfWeek.TUESDAY,
+      DayOfWeek.WEDNESDAY,
+      DayOfWeek.THURSDAY,
+      DayOfWeek.FRIDAY,
+      DayOfWeek.SATURDAY,
+    ];
+
+    return days[dayIndex];
+  }
+
+  private getDatePartsInTimeZone(date: Date, timeZone: string) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    const parts = formatter.formatToParts(date);
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+      Number(parts.find((part) => part.type === type)?.value);
+
+    return {
+      year: value('year'),
+      month: value('month'),
+      day: value('day'),
+      hours: value('hour'),
+      minutes: value('minute'),
     };
   }
 

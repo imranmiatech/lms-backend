@@ -3,8 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ApplicationStatus, DayOfWeek } from '@prisma/client';
+import {
+  ApplicationStatus,
+  DayOfWeek,
+  PaymentStatus,
+  PaymentType,
+  Role,
+} from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import {
+  combineDateAndTime,
+  parseClockTime,
+} from '../common/time/lesson-status.util';
 import { S3StorageService } from '../common/s3/s3.service';
 import {
   AvailabilityDto,
@@ -166,7 +176,7 @@ export class ProfileService {
     };
   }
 
-  async getProfile(userId: string) {
+  async getProfile(userId: string, availabilityDate?: string) {
     const [profile, completedCourses] = await Promise.all([
       this.prisma.userProfile.findUnique({
         where: { userId },
@@ -189,9 +199,15 @@ export class ProfileService {
       throw new NotFoundException('Profile not found');
     }
 
+    const privateBookingAvailability =
+      profile.user.role === Role.TUTOR
+        ? await this.getPrivateBookingAvailability(profile, availabilityDate)
+        : undefined;
+
     return {
       ...profile,
       completedCoursesCount: completedCourses.length,
+      ...(privateBookingAvailability && { privateBookingAvailability }),
     };
   }
 
@@ -444,6 +460,193 @@ export class ProfileService {
     }
 
     return availabilities;
+  }
+
+  private async getPrivateBookingAvailability(
+    profile: {
+      userId: string;
+      availability: {
+        id: string;
+        dayOfWeek: DayOfWeek;
+        startTime: string;
+        endTime: string;
+        timezone: string | null;
+      }[];
+    },
+    date?: string,
+  ) {
+    const now = new Date();
+    const bookings = await this.prisma.payment.findMany({
+      where: {
+        tutorId: profile.userId,
+        type: PaymentType.PRIVATE,
+        status: {
+          in: [PaymentStatus.PENDING, PaymentStatus.PAID],
+        },
+        privateLessonStartsAt: {
+          gte: now,
+        },
+      },
+      orderBy: {
+        privateLessonStartsAt: 'asc',
+      },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        privateLessonStartsAt: true,
+        privateLessonDuration: true,
+      },
+    });
+
+    const bookedSlots = bookings
+      .filter((booking) => booking.privateLessonStartsAt)
+      .map((booking) => {
+        const startsAt = booking.privateLessonStartsAt!;
+        const durationMinutes = booking.privateLessonDuration ?? 60;
+
+        return {
+          paymentId: booking.id,
+          studentId: booking.userId,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + durationMinutes * 60 * 1000),
+          durationMinutes,
+          paymentStatus: booking.status,
+          status: 'booked',
+        };
+      });
+
+    return {
+      date: date ?? null,
+      bookedSlots,
+      ...(date && {
+        availabilityForDate: this.buildAvailabilityForDate(
+          date,
+          profile.availability,
+          bookedSlots,
+        ),
+      }),
+    };
+  }
+
+  private buildAvailabilityForDate(
+    date: string,
+    availability: {
+      id: string;
+      dayOfWeek: DayOfWeek;
+      startTime: string;
+      endTime: string;
+      timezone: string | null;
+    }[],
+    bookedSlots: {
+      paymentId: string;
+      studentId: string;
+      startsAt: Date;
+      endsAt: Date;
+      durationMinutes: number;
+      paymentStatus: PaymentStatus;
+      status: string;
+    }[],
+  ) {
+    const dayOfWeek = this.getDayOfWeekFromDateString(date);
+    const dayAvailability = availability.filter(
+      (item) => item.dayOfWeek === dayOfWeek,
+    );
+
+    const windows = dayAvailability.map((item) => {
+      const startsAt = combineDateAndTime(
+        new Date(`${date}T00:00:00.000Z`),
+        item.startTime,
+        item.timezone,
+      );
+      const endsAt = combineDateAndTime(
+        new Date(`${date}T00:00:00.000Z`),
+        item.endTime,
+        item.timezone,
+      );
+      const windowBookedSlots = bookedSlots.filter(
+        (slot) => slot.startsAt < endsAt && slot.endsAt > startsAt,
+      );
+      const freeSlots = this.getFreeSlots(startsAt, endsAt, windowBookedSlots);
+
+      return {
+        availabilityId: item.id,
+        dayOfWeek: item.dayOfWeek,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        timezone: item.timezone,
+        startsAt,
+        endsAt,
+        status: freeSlots.length ? 'available' : 'booked',
+        bookedSlots: windowBookedSlots,
+        freeSlots,
+      };
+    });
+
+    return {
+      status: !windows.length
+        ? 'unavailable'
+        : windows.some((window) => window.freeSlots.length)
+          ? 'available'
+          : 'booked',
+      windows,
+    };
+  }
+
+  private getFreeSlots(
+    startsAt: Date,
+    endsAt: Date,
+    bookedSlots: { startsAt: Date; endsAt: Date }[],
+  ) {
+    const sortedBookings = [...bookedSlots].sort(
+      (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+    );
+    const freeSlots: { startsAt: Date; endsAt: Date; status: string }[] = [];
+    let cursor = startsAt;
+
+    for (const booking of sortedBookings) {
+      if (booking.startsAt > cursor) {
+        freeSlots.push({
+          startsAt: cursor,
+          endsAt: booking.startsAt,
+          status: 'free',
+        });
+      }
+
+      if (booking.endsAt > cursor) {
+        cursor = booking.endsAt;
+      }
+    }
+
+    if (cursor < endsAt) {
+      freeSlots.push({
+        startsAt: cursor,
+        endsAt,
+        status: 'free',
+      });
+    }
+
+    return freeSlots;
+  }
+
+  private getDayOfWeekFromDateString(date: string) {
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new BadRequestException('date must be a valid YYYY-MM-DD value');
+    }
+
+    const days: DayOfWeek[] = [
+      DayOfWeek.SUNDAY,
+      DayOfWeek.MONDAY,
+      DayOfWeek.TUESDAY,
+      DayOfWeek.WEDNESDAY,
+      DayOfWeek.THURSDAY,
+      DayOfWeek.FRIDAY,
+      DayOfWeek.SATURDAY,
+    ];
+
+    return days[parsedDate.getUTCDay()];
   }
 
   private mapAvailability(availability?: AvailabilityDto[]) {

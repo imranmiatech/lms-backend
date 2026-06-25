@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -46,6 +47,36 @@ export class CreatePrivateBookingCheckoutSessionDto {
   @IsOptional()
   @IsDateString()
   scheduledAt?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Private lesson date in tutor availability timezone. Use with scheduledTime.',
+    example: '2026-06-25',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  scheduledDate?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Private lesson start time in 24-hour or am/pm format. Use with scheduledDate.',
+    example: '14:00',
+  })
+  @IsOptional()
+  @IsString()
+  scheduledTime?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Private lesson duration in minutes. Must fit inside tutor availability.',
+    minimum: 1,
+    example: 60,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  durationMinutes?: number;
 }
 
 export class CreateCheckoutSessionDto {
@@ -87,4 +118,34 @@ export class CreateCheckoutSessionDto {
   @IsOptional()
   @IsDateString()
   scheduledAt?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Private lesson date in tutor availability timezone. Use with scheduledTime.',
+    example: '2026-06-25',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  scheduledDate?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Private lesson start time in 24-hour or am/pm format. Use with scheduledDate.',
+    example: '14:00',
+  })
+  @IsOptional()
+  @IsString()
+  scheduledTime?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Private lesson duration in minutes. Must fit inside tutor availability.',
+    minimum: 1,
+    example: 60,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  durationMinutes?: number;
 }

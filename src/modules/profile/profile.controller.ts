@@ -236,8 +236,11 @@ export class ProfileController {
   }
 
   @Get('tutor/:userId')
-  getTutorProfile(@Param('userId') userId: string) {
-    return this.profileService.getProfile(userId);
+  getTutorProfile(
+    @Param('userId') userId: string,
+    @Query('date') date?: string,
+  ) {
+    return this.profileService.getProfile(userId, date);
   }
 
   @Get(':tutorId/availability')

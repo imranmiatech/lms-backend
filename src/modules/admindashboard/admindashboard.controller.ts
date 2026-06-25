@@ -130,7 +130,7 @@ export class AdminDashboardController {
   @Get('students')
   @ApiOperation({ summary: 'Get all student users for admin dashboard' })
   getStudents() {
-    return this.adminDashboardService.getUsersByRole(Role.STUDENT);
+    return this.adminDashboardService.getStudents();
   }
 
   @Get('student-management')

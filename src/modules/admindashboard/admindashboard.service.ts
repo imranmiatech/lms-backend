@@ -229,6 +229,91 @@ export class AdminDashboardService {
     };
   }
 
+  async getStudents() {
+    const students = await this.prisma.user.findMany({
+      where: {
+        role: Role.STUDENT,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      select: {
+        ...this.userListSelect(),
+        _count: {
+          select: {
+            courseEnrollments: true,
+            courseCompletions: true,
+          },
+        },
+      },
+    });
+
+    const studentIds = students.map((student) => student.id);
+    const [paymentTotals, privatePaymentCounts] =
+      studentIds.length > 0
+        ? await Promise.all([
+            this.prisma.payment.groupBy({
+              by: ['userId'],
+              where: {
+                userId: {
+                  in: studentIds,
+                },
+                status: PaymentStatus.PAID,
+              },
+              _sum: {
+                amount: true,
+              },
+            }),
+            this.prisma.payment.groupBy({
+              by: ['userId'],
+              where: {
+                userId: {
+                  in: studentIds,
+                },
+                type: PaymentType.PRIVATE,
+                status: PaymentStatus.PAID,
+              },
+              _count: {
+                id: true,
+              },
+            }),
+          ])
+        : [[], []];
+
+    const spendingByStudent = new Map(
+      paymentTotals.map((payment) => [
+        payment.userId,
+        payment._sum.amount ?? 0,
+      ]),
+    );
+    const privateCountByStudent = new Map(
+      privatePaymentCounts.map((payment) => [
+        payment.userId,
+        payment._count.id,
+      ]),
+    );
+
+    return {
+      success: true,
+      data: students.map(({ _count, ...student }) => {
+        const totalSpending = spendingByStudent.get(student.id) ?? 0;
+        const privateEnrollmentCount = privateCountByStudent.get(student.id) ?? 0;
+        const enrollment = _count.courseEnrollments + privateEnrollmentCount;
+        const completed = _count.courseCompletions;
+
+        return {
+          ...student,
+          enrollment,
+          enrollmentCount: enrollment,
+          completed,
+          completedCount: completed,
+          totalSpending,
+          totalSpendingLabel: this.formatCurrency(totalSpending),
+        };
+      }),
+    };
+  }
+
   async getStudentManagement(query: AdminStudentManagementQueryDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.max(1, Math.min(query.limit ?? 10, 100));

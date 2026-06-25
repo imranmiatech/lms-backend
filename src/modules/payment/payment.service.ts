@@ -2111,7 +2111,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
     return (
       process.env.BACKEND_URL ??
       process.env.API_URL ??
-      'http://localhost:3000'
+      'https://api.braens.eu'
     ).replace(/\/$/, '');
   }
 

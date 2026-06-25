@@ -26,6 +26,10 @@ import {
 } from './dto/admin-group-classes-query.dto';
 import { AdminPaymentOverviewQueryDto } from './dto/admin-payment-overview-query.dto';
 import { AdminPayoutManagementQueryDto } from './dto/admin-payout-management-query.dto';
+import {
+  AdminStudentManagementQueryDto,
+  AdminStudentStatusFilter,
+} from './dto/admin-student-management-query.dto';
 import { TutorStatusFilter } from './dto/tutor-status-query.dto';
 
 type AdminBookingPayment = Prisma.PaymentGetPayload<{
@@ -222,6 +226,153 @@ export class AdminDashboardService {
     return {
       success: true,
       data: users,
+    };
+  }
+
+  async getStudentManagement(query: AdminStudentManagementQueryDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.max(1, Math.min(query.limit ?? 10, 100));
+    const search = query.search?.trim();
+    const status = query.status ?? 'all';
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.UserWhereInput = {
+      role: Role.STUDENT,
+      ...this.buildStudentStatusWhere(status),
+      ...(search && {
+        OR: [
+          {
+            fullName: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+          {
+            email: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      }),
+    };
+
+    const [total, students] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          isEmailVerified: true,
+          createdAt: true,
+          profile: {
+            select: {
+              id: true,
+              avatarUrl: true,
+            },
+          },
+          _count: {
+            select: {
+              courseEnrollments: true,
+              courseCompletions: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const studentIds = students.map((student) => student.id);
+    const [paymentTotals, privatePaymentCounts] =
+      studentIds.length > 0
+        ? await Promise.all([
+            this.prisma.payment.groupBy({
+              by: ['userId'],
+              where: {
+                userId: {
+                  in: studentIds,
+                },
+                status: PaymentStatus.PAID,
+              },
+              _sum: {
+                amount: true,
+              },
+            }),
+            this.prisma.payment.groupBy({
+              by: ['userId'],
+              where: {
+                userId: {
+                  in: studentIds,
+                },
+                type: PaymentType.PRIVATE,
+                status: PaymentStatus.PAID,
+              },
+              _count: {
+                id: true,
+              },
+            }),
+          ])
+        : [[], []];
+
+    const spendingByStudent = new Map(
+      paymentTotals.map((payment) => [
+        payment.userId,
+        payment._sum.amount ?? 0,
+      ]),
+    );
+    const privateCountByStudent = new Map(
+      privatePaymentCounts.map((payment) => [
+        payment.userId,
+        payment._count.id,
+      ]),
+    );
+
+    return {
+      success: true,
+      data: {
+        title: 'Student',
+        students: students.map((student) => {
+          const totalSpending = spendingByStudent.get(student.id) ?? 0;
+          const privateEnrollmentCount =
+            privateCountByStudent.get(student.id) ?? 0;
+          const enrollmentCount =
+            student._count.courseEnrollments + privateEnrollmentCount;
+          const statusValue = student.isEmailVerified ? 'active' : 'inactive';
+
+          return {
+            id: student.id,
+            studentId: student.id,
+            studentName: student.fullName,
+            studentEmail: student.email,
+            studentImage: student.profile?.avatarUrl ?? null,
+            enrollment: enrollmentCount,
+            enrollmentCount,
+            completed: student._count.courseCompletions,
+            completedCount: student._count.courseCompletions,
+            totalSpending,
+            totalSpendingLabel: this.formatCurrency(totalSpending),
+            status: statusValue,
+            statusLabel: this.toTitleCase(statusValue),
+            joined: student.createdAt,
+            joinedLabel: this.formatFullDate(student.createdAt),
+            actions: {
+              view: `/admindashboard/profiles/${student.profile?.id ?? student.id}`,
+              delete: `/admindashboard/users/${student.id}`,
+            },
+          };
+        }),
+        filters: {
+          search: search ?? null,
+          status,
+        },
+        meta: this.buildPaginationMeta(page, limit, total, students.length),
+      },
     };
   }
 
@@ -1239,6 +1390,24 @@ export class AdminDashboardService {
     };
   }
 
+  private buildStudentStatusWhere(
+    status: AdminStudentStatusFilter,
+  ): Prisma.UserWhereInput {
+    if (status === 'active') {
+      return {
+        isEmailVerified: true,
+      };
+    }
+
+    if (status === 'inactive') {
+      return {
+        isEmailVerified: false,
+      };
+    }
+
+    return {};
+  }
+
   private adminGroupCourseInclude() {
     return {
       tutor: {
@@ -1866,6 +2035,14 @@ export class AdminDashboardService {
       day: 'numeric',
       year: 'numeric',
     });
+  }
+
+  private toTitleCase(value: string) {
+    return value
+      .split(/[\s_-]+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   }
 
   private formatTransactionCode(id: string) {

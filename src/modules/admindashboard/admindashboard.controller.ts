@@ -35,6 +35,7 @@ import {
 } from './dto/admin-group-classes-query.dto';
 import { AdminPaymentOverviewQueryDto } from './dto/admin-payment-overview-query.dto';
 import { AdminPayoutManagementQueryDto } from './dto/admin-payout-management-query.dto';
+import { AdminStudentManagementQueryDto } from './dto/admin-student-management-query.dto';
 import { TutorStatusQueryDto } from './dto/tutor-status-query.dto';
 import { UpdateRoleDto } from '../users/dto/update-role.dto';
 
@@ -130,6 +131,30 @@ export class AdminDashboardController {
   @ApiOperation({ summary: 'Get all student users for admin dashboard' })
   getStudents() {
     return this.adminDashboardService.getUsersByRole(Role.STUDENT);
+  }
+
+  @Get('student-management')
+  @ApiOperation({
+    summary: 'Get admin student management table',
+    description:
+      'Admin student page API. Returns students with enrollment count, completed count, total spending, status, joined date, and pagination.',
+  })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    example: 'Albert',
+    description: 'Search by student name or email.',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['all', 'active', 'inactive'],
+    example: 'all',
+  })
+  getStudentManagement(@Query() query: AdminStudentManagementQueryDto) {
+    return this.adminDashboardService.getStudentManagement(query);
   }
 
   @Patch('users/:id/role')

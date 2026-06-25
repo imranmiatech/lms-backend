@@ -34,6 +34,11 @@ export class ReviewController {
     return this.reviewService.findAll(tutorProfileId);
   }
 
+  @Get('all')
+  findAllReviews(@Query('tutorProfileId') tutorProfileId?: string) {
+    return this.reviewService.findAll(tutorProfileId);
+  }
+
   @Get('tutor/:tutorProfileId')
   findTutorReviewList(
     @Param() params: TutorReviewListParamDto,

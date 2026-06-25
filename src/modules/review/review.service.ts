@@ -92,21 +92,49 @@ export class ReviewService {
             },
           },
         },
+        tutorProfile: {
+          select: {
+            id: true,
+            userId: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     return rows.map((review) => ({
       id: review.id,
+      studentId: review.reviewerId,
+      reviewerId: review.reviewerId,
+      tutorProfileId: review.tutorProfileId,
+      tutorId: review.tutorProfile.userId,
       rating: review.rating,
       description: review.comment,
+      comment: review.comment,
       reviewer: {
         id: review.reviewer.id,
         name: review.reviewer.fullName,
         image: review.reviewer.profile?.avatarUrl ?? null,
         completedLessons: 0,
       },
+      student: {
+        id: review.reviewer.id,
+        name: review.reviewer.fullName,
+        image: review.reviewer.profile?.avatarUrl ?? null,
+      },
+      tutor: {
+        id: review.tutorProfile.user.id,
+        profileId: review.tutorProfile.id,
+        name: review.tutorProfile.user.fullName,
+      },
       createdAt: review.createdAt,
+      updatedAt: review.updatedAt,
     }));
   }
 
@@ -205,12 +233,19 @@ export class ReviewService {
         include: {
           reviewer: {
             select: {
+              id: true,
               fullName: true,
               profile: {
                 select: {
                   avatarUrl: true,
                 },
               },
+            },
+          },
+          tutorProfile: {
+            select: {
+              id: true,
+              userId: true,
             },
           },
         },
@@ -245,6 +280,10 @@ export class ReviewService {
       ratingBreakdown,
       reviews: reviews.map((review) => ({
         id: review.id,
+        studentId: review.reviewerId,
+        reviewerId: review.reviewerId,
+        tutorProfileId: review.tutorProfileId,
+        tutorId: review.tutorProfile.userId,
         studentName: review.reviewer.fullName || 'Anonymous',
         studentAvatar: review.reviewer.profile?.avatarUrl ?? null,
         rating: review.rating,

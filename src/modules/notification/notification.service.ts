@@ -12,10 +12,14 @@ import {
   NotificationAudience,
   NotificationQueryDto,
 } from './dto/notification.dto';
+import { NotificationGateway } from './notification.gateway';
 
 @Injectable()
 export class NotificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationGateway: NotificationGateway,
+  ) {}
 
   async create(dto: CreateNotificationDto) {
     const userIds = await this.resolveAudienceUserIds(dto);
@@ -46,6 +50,12 @@ export class NotificationService {
       ),
     );
 
+    await Promise.all(
+      notifications.map((notification) =>
+        this.emitNotificationCreated(notification.userId, notification),
+      ),
+    );
+
     return {
       success: true,
       message: 'Notification created successfully',
@@ -58,7 +68,7 @@ export class NotificationService {
     userId: string,
     payload: Omit<CreateNotificationDto, 'audience' | 'role' | 'userId' | 'userIds'>,
   ) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: {
         userId,
         type: payload.type,
@@ -69,6 +79,10 @@ export class NotificationService {
         deliveredAt: new Date(),
       },
     });
+
+    await this.emitNotificationCreated(userId, notification);
+
+    return notification;
   }
 
   async findMine(userId: string, query: NotificationQueryDto) {
@@ -129,6 +143,9 @@ export class NotificationService {
       data: { isRead: true },
     });
 
+    this.notificationGateway.emitNotificationRead(userId, updated);
+    await this.emitUnreadCount(userId);
+
     return {
       success: true,
       message: 'Notification marked as read',
@@ -141,6 +158,9 @@ export class NotificationService {
       where: { userId, isRead: false },
       data: { isRead: true },
     });
+
+    this.notificationGateway.emitAllNotificationsRead(userId, result.count);
+    await this.emitUnreadCount(userId);
 
     return {
       success: true,
@@ -156,6 +176,9 @@ export class NotificationService {
       where: { id: notificationId },
     });
 
+    this.notificationGateway.emitNotificationDeleted(userId, notificationId);
+    await this.emitUnreadCount(userId);
+
     return { success: true, message: 'Notification deleted successfully' };
   }
 
@@ -163,6 +186,9 @@ export class NotificationService {
     const result = await this.prisma.notification.deleteMany({
       where: { userId },
     });
+
+    this.notificationGateway.emitAllNotificationsDeleted(userId, result.count);
+    await this.emitUnreadCount(userId);
 
     return {
       success: true,
@@ -182,7 +208,26 @@ export class NotificationService {
 
     await this.prisma.notification.delete({ where: { id: notificationId } });
 
+    this.notificationGateway.emitNotificationDeleted(
+      notification.userId,
+      notificationId,
+    );
+    await this.emitUnreadCount(notification.userId);
+
     return { success: true, message: 'Notification deleted successfully' };
+  }
+
+  private async emitNotificationCreated(userId: string, notification: any) {
+    this.notificationGateway.emitNewNotification(userId, notification);
+    await this.emitUnreadCount(userId);
+  }
+
+  private async emitUnreadCount(userId: string) {
+    const unreadCount = await this.prisma.notification.count({
+      where: { userId, isRead: false },
+    });
+
+    this.notificationGateway.emitUnreadCount(userId, unreadCount);
   }
 
   private async resolveAudienceUserIds(dto: CreateNotificationDto) {

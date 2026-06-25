@@ -30,7 +30,7 @@ import {
 @ApiTags('Notifications')
 @ApiBearerAuth()
 @UseGuards(AuthGuard)
-@Controller(['notifications', 'notification'])
+@Controller('notifications')
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 

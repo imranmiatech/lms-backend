@@ -11,10 +11,7 @@ import {
   Role,
 } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import {
-  combineDateAndTime,
-  parseClockTime,
-} from '../common/time/lesson-status.util';
+import { combineDateAndTime } from '../common/time/lesson-status.util';
 import { S3StorageService } from '../common/s3/s3.service';
 import {
   AvailabilityDto,
@@ -203,9 +200,14 @@ export class ProfileService {
       profile.user.role === Role.TUTOR
         ? await this.getPrivateBookingAvailability(profile, availabilityDate)
         : undefined;
+    const availabilityWithDates =
+      profile.user.role === Role.TUTOR
+        ? this.addDatesToAvailability(profile.availability, availabilityDate)
+        : profile.availability;
 
     return {
       ...profile,
+      availability: availabilityWithDates,
       completedCoursesCount: completedCourses.length,
       ...(privateBookingAvailability && { privateBookingAvailability }),
     };
@@ -452,14 +454,124 @@ export class ProfileService {
       });
 
       if (course && course.timeZone) {
-        return availabilities.map((a) => ({
-          ...a,
-          timezone: (a as any).timezone ?? course.timeZone,
-        }));
+        return this.addDatesToAvailability(
+          availabilities.map((a) => ({
+            ...a,
+            timezone: (a as any).timezone ?? course.timeZone,
+          })),
+        );
       }
     }
 
-    return availabilities;
+    return this.addDatesToAvailability(availabilities);
+  }
+
+  private addDatesToAvailability(
+    availability: {
+      id: string;
+      dayOfWeek: DayOfWeek;
+      startTime: string;
+      endTime: string;
+      timezone: string | null;
+      [key: string]: any;
+    }[],
+    selectedDate?: string,
+  ) {
+    return availability.map((item) => {
+      const date = this.getNextDateForDay(
+        item.dayOfWeek,
+        item.timezone,
+        selectedDate,
+      );
+      const startsAt = combineDateAndTime(
+        new Date(`${date}T00:00:00.000Z`),
+        item.startTime,
+        item.timezone,
+      );
+      const endsAt = combineDateAndTime(
+        new Date(`${date}T00:00:00.000Z`),
+        item.endTime,
+        item.timezone,
+      );
+
+      return {
+        ...item,
+        date,
+        dateLabel: this.formatAvailabilityDate(date),
+        startsAt,
+        endsAt,
+      };
+    });
+  }
+
+  private getNextDateForDay(
+    dayOfWeek: DayOfWeek,
+    timezone?: string | null,
+    selectedDate?: string,
+  ) {
+    const baseDate = selectedDate
+      ? this.parseDateOnly(selectedDate)
+      : this.getTodayInTimeZone(timezone);
+    const targetDayIndex = this.dayOfWeekToIndex(dayOfWeek);
+    const baseDayIndex = baseDate.getUTCDay();
+    const daysToAdd = (targetDayIndex - baseDayIndex + 7) % 7;
+    const nextDate = new Date(baseDate);
+    nextDate.setUTCDate(baseDate.getUTCDate() + daysToAdd);
+
+    return this.toDateOnly(nextDate);
+  }
+
+  private parseDateOnly(date: string) {
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new BadRequestException('date must be a valid YYYY-MM-DD value');
+    }
+
+    return parsedDate;
+  }
+
+  private getTodayInTimeZone(timezone?: string | null) {
+    if (!timezone) {
+      return this.parseDateOnly(this.toDateOnly(new Date()));
+    }
+
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+
+    return this.parseDateOnly(formatter.format(new Date()));
+  }
+
+  private toDateOnly(date: Date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private formatAvailabilityDate(date: string) {
+    return new Date(`${date}T00:00:00.000Z`).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+
+  private dayOfWeekToIndex(dayOfWeek: DayOfWeek) {
+    const indexes: Record<DayOfWeek, number> = {
+      [DayOfWeek.SUNDAY]: 0,
+      [DayOfWeek.MONDAY]: 1,
+      [DayOfWeek.TUESDAY]: 2,
+      [DayOfWeek.WEDNESDAY]: 3,
+      [DayOfWeek.THURSDAY]: 4,
+      [DayOfWeek.FRIDAY]: 5,
+      [DayOfWeek.SATURDAY]: 6,
+    };
+
+    return indexes[dayOfWeek];
   }
 
   private async getPrivateBookingAvailability(
@@ -519,6 +631,7 @@ export class ProfileService {
     return {
       date: date ?? null,
       bookedSlots,
+      nextAvailable: this.getNextAvailableWindow(profile.availability, bookedSlots),
       ...(date && {
         availabilityForDate: this.buildAvailabilityForDate(
           date,
@@ -572,6 +685,8 @@ export class ProfileService {
       return {
         availabilityId: item.id,
         dayOfWeek: item.dayOfWeek,
+        date,
+        dateLabel: this.formatAvailabilityDate(date),
         startTime: item.startTime,
         endTime: item.endTime,
         timezone: item.timezone,
@@ -590,6 +705,56 @@ export class ProfileService {
           ? 'available'
           : 'booked',
       windows,
+    };
+  }
+
+  private getNextAvailableWindow(
+    availability: {
+      id: string;
+      dayOfWeek: DayOfWeek;
+      startTime: string;
+      endTime: string;
+      timezone: string | null;
+    }[],
+    bookedSlots: { startsAt: Date; endsAt: Date }[],
+  ) {
+    const windows = this.addDatesToAvailability(availability)
+      .map((item) => {
+        const freeSlots = this.getFreeSlots(
+          item.startsAt,
+          item.endsAt,
+          bookedSlots.filter(
+            (slot) => slot.startsAt < item.endsAt && slot.endsAt > item.startsAt,
+          ),
+        );
+
+        return {
+          ...item,
+          status: freeSlots.length ? 'available' : 'booked',
+          freeSlots,
+        };
+      })
+      .filter((item) => item.freeSlots.length)
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+
+    const next = windows[0];
+
+    if (!next) {
+      return null;
+    }
+
+    return {
+      availabilityId: next.id,
+      dayOfWeek: next.dayOfWeek,
+      date: next.date,
+      dateLabel: next.dateLabel,
+      startTime: next.startTime,
+      endTime: next.endTime,
+      timezone: next.timezone,
+      startsAt: next.startsAt,
+      endsAt: next.endsAt,
+      firstFreeSlot: next.freeSlots[0],
+      status: next.status,
     };
   }
 

@@ -129,8 +129,10 @@ export class AdminDashboardController {
 
   @Get('students')
   @ApiOperation({ summary: 'Get all student users for admin dashboard' })
-  getStudents() {
-    return this.adminDashboardService.getStudents();
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  getStudents(@Query() query: AdminStudentManagementQueryDto) {
+    return this.adminDashboardService.getStudents(query);
   }
 
   @Get('student-management')

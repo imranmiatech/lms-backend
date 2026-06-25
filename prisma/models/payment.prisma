@@ -55,4 +55,9 @@ model Payment {
   @@index([status])
   @@index([payoutStatus])
   @@index([privateLessonStartsAt])
+  @@index([userId, status])
+  @@index([userId, type, status])
+  @@index([tutorId, status])
+  @@index([status, createdAt])
+  @@index([status, payoutStatus])
 }

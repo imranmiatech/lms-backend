@@ -159,6 +159,18 @@ export class NotificationService {
     return { success: true, message: 'Notification deleted successfully' };
   }
 
+  async deleteAllMine(userId: string) {
+    const result = await this.prisma.notification.deleteMany({
+      where: { userId },
+    });
+
+    return {
+      success: true,
+      message: 'All notifications deleted successfully',
+      data: { deletedCount: result.count },
+    };
+  }
+
   async deleteByAdmin(notificationId: string) {
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId },

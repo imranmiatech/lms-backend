@@ -17,6 +17,8 @@ import Stripe = require('stripe');
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AgoraService } from '../agora/agora.service';
 import { getTimedClassStatus } from '../common/time/lesson-status.util';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationAudience } from '../notification/dto/notification.dto';
 import {
   CreateCheckoutSessionDto,
   CreateGroupClassCheckoutSessionDto,
@@ -60,6 +62,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agoraService: AgoraService,
+    private readonly notificationService: NotificationService,
   ) {
     const secretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -1647,6 +1650,20 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         userId: true,
         type: true,
         amount: true,
+        status: true,
+        course: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -1689,6 +1706,46 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         });
       }
     });
+
+    if (
+      payment.status !== PaymentStatus.PAID &&
+      payment.type === PaymentType.GROUP &&
+      payment.courseId
+    ) {
+      await this.notifyAdmins({
+        type: 'COURSE_ENROLLMENT',
+        title: 'New course enrollment',
+        body: `${payment.user.fullName} enrolled in ${payment.course?.title ?? 'a course'}.`,
+        targetUrl: `/admindashboard/group-classes/${payment.courseId}`,
+        data: {
+          paymentId: payment.id,
+          courseId: payment.courseId,
+          courseTitle: payment.course?.title,
+          studentId: payment.user.id,
+          studentName: payment.user.fullName,
+          studentEmail: payment.user.email,
+          amount: payment.amount,
+        },
+      });
+    }
+  }
+
+  private async notifyAdmins(payload: {
+    type: string;
+    title: string;
+    body?: string;
+    targetUrl?: string;
+    data?: Record<string, unknown>;
+  }) {
+    try {
+      await this.notificationService.create({
+        audience: NotificationAudience.ROLE,
+        role: Role.ADMIN,
+        ...payload,
+      });
+    } catch (error) {
+      console.error('Failed to create admin notification', error);
+    }
   }
 
   private async updatePaymentFromSession(session: any, status: PaymentStatus) {

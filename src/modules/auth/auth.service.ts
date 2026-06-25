@@ -6,11 +6,14 @@ import {
 } from '@nestjs/common';
 
 import * as bcrypt from 'bcrypt';
+import { Role } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { LoginDto, RegisterDto } from './dto/auth.dto';
 import * as jwt from 'jsonwebtoken';
 import { MailService } from '../common/mail/mail.service';
 import { UpstashRedisService } from '../common/redis/upstash-redis.service';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationAudience } from '../notification/dto/notification.dto';
 
 const PASSWORD_RESET_OTP_TTL_SECONDS = 10 * 60;
 const PASSWORD_RESET_COOLDOWN_SECONDS = 60;
@@ -26,6 +29,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly redis: UpstashRedisService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -79,6 +83,19 @@ export class AuthService {
       },
     });
 
+    await this.notifyAdmins({
+      type: 'USER_SIGNUP',
+      title: 'New user signup',
+      body: `${user.fullName} signed up as ${user.role.toLowerCase()}.`,
+      targetUrl: `/admindashboard/profiles/${user.profile?.id ?? user.id}`,
+      data: {
+        userId: user.id,
+        profileId: user.profile?.id,
+        role: user.role,
+        email: user.email,
+      },
+    });
+
     // Remove Password
     const { password: _, ...result } = user;
 
@@ -87,6 +104,24 @@ export class AuthService {
       message: 'Registration successful',
       data: result,
     };
+  }
+
+  private async notifyAdmins(payload: {
+    type: string;
+    title: string;
+    body?: string;
+    targetUrl?: string;
+    data?: Record<string, unknown>;
+  }) {
+    try {
+      await this.notificationService.create({
+        audience: NotificationAudience.ROLE,
+        role: Role.ADMIN,
+        ...payload,
+      });
+    } catch (error) {
+      console.error('Failed to create admin notification', error);
+    }
   }
 
   /////------------Login -------------//

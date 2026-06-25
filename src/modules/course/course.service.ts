@@ -15,6 +15,8 @@ import { randomUUID } from 'crypto';
 import Stripe = require('stripe');
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3StorageService } from '../common/s3/s3.service';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationAudience } from '../notification/dto/notification.dto';
 import {
   CoursePriceFilter,
   CourseSubjectFilter,
@@ -65,6 +67,7 @@ export class CourseService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3StorageService: S3StorageService,
+    private readonly notificationService: NotificationService,
   ) {
     const secretKey = process.env.STRIPE_SECRET_KEY;
 
@@ -399,6 +402,8 @@ export class CourseService {
       },
       select: {
         id: true,
+        fullName: true,
+        email: true,
       },
     });
 
@@ -508,6 +513,8 @@ export class CourseService {
       },
       select: {
         id: true,
+        fullName: true,
+        email: true,
       },
     });
 
@@ -521,6 +528,7 @@ export class CourseService {
       },
       select: {
         id: true,
+        title: true,
         maxStudent: true,
         startDate: true,
         enrollmentDeadline: true,
@@ -559,6 +567,21 @@ export class CourseService {
     const enrollment = await this.createCourseEnrollment(courseId, studentId);
     const updatedEnrolledStudentCount = enrolledStudentCount + 1;
 
+    await this.notifyAdmins({
+      type: 'COURSE_ENROLLMENT',
+      title: 'New course enrollment',
+      body: `${student.fullName} enrolled in ${course.title}.`,
+      targetUrl: `/admindashboard/group-classes/${course.id}`,
+      data: {
+        enrollmentId: enrollment.id,
+        courseId: course.id,
+        courseTitle: course.title,
+        studentId: student.id,
+        studentName: student.fullName,
+        studentEmail: student.email,
+      },
+    });
+
     return {
       success: true,
       message: 'Student enrolled successfully',
@@ -572,6 +595,24 @@ export class CourseService {
         ),
       },
     };
+  }
+
+  private async notifyAdmins(payload: {
+    type: string;
+    title: string;
+    body?: string;
+    targetUrl?: string;
+    data?: Record<string, unknown>;
+  }) {
+    try {
+      await this.notificationService.create({
+        audience: NotificationAudience.ROLE,
+        role: Role.ADMIN,
+        ...payload,
+      });
+    } catch (error) {
+      console.error('Failed to create admin notification', error);
+    }
   }
 
   async getUpcomingCourses(query: UpcomingCourseQueryDto) {

@@ -30,7 +30,7 @@ import {
 @ApiTags('Notifications')
 @ApiBearerAuth()
 @UseGuards(AuthGuard)
-@Controller('notifications')
+@Controller(['notifications', 'notification'])
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
@@ -78,6 +78,12 @@ export class NotificationController {
       user.userId,
       notificationId,
     );
+  }
+
+  @Delete('all')
+  @ApiOperation({ summary: 'Delete all current user notifications' })
+  deleteAllMine(@CurrentUser() user: { userId: string }) {
+    return this.notificationService.deleteAllMine(user.userId);
   }
 
   @Delete(':notificationId')

@@ -229,24 +229,34 @@ export class AdminDashboardService {
     };
   }
 
-  async getStudents() {
-    const students = await this.prisma.user.findMany({
-      where: {
-        role: Role.STUDENT,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        ...this.userListSelect(),
-        _count: {
-          select: {
-            courseEnrollments: true,
-            courseCompletions: true,
+  async getStudents(query: AdminStudentManagementQueryDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.max(1, Math.min(query.limit ?? 10, 100));
+    const skip = (page - 1) * limit;
+    const where: Prisma.UserWhereInput = {
+      role: Role.STUDENT,
+    };
+
+    const [total, students] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+        select: {
+          ...this.userListSelect(),
+          _count: {
+            select: {
+              courseEnrollments: true,
+              courseCompletions: true,
+            },
           },
         },
-      },
-    });
+      }),
+    ]);
 
     const studentIds = students.map((student) => student.id);
     const [paymentTotals, privatePaymentCounts] =
@@ -311,6 +321,7 @@ export class AdminDashboardService {
           totalSpendingLabel: this.formatCurrency(totalSpending),
         };
       }),
+      meta: this.buildPaginationMeta(page, limit, total, students.length),
     };
   }
 

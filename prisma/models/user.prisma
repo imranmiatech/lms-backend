@@ -31,4 +31,6 @@ model User {
   notifyLessonReminders Boolean                   @default(true)
   notifyNewMessages     Boolean                   @default(true)
   notifyWeeklyDigest    Boolean                   @default(false)
+
+  @@index([role, createdAt])
 }

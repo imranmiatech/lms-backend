@@ -52,7 +52,10 @@ export class ProfileService {
     }
 
     const availabilityData = this.mapAvailability(availability);
-    const uploadedFiles = await this.uploadProfileFiles(files);
+    const uploadedFiles = await this.uploadProfileFiles(files, {
+      avatarUrl,
+      videoUrl,
+    });
     const finalAvatarUrl = uploadedFiles.avatarUrl ?? avatarUrl;
     const finalVideoUrl = uploadedFiles.videoUrl ?? videoUrl;
 
@@ -264,7 +267,10 @@ export class ProfileService {
       }
     }
 
-    const uploadedFiles = await this.uploadProfileFiles(files);
+    const uploadedFiles = await this.uploadProfileFiles(files, {
+      avatarUrl,
+      videoUrl,
+    });
 
     return this.prisma.userProfile.update({
       where: { userId },
@@ -286,40 +292,96 @@ export class ProfileService {
     });
   }
 
-  private async uploadProfileFiles(files?: { avatarFile?: any; videoFile?: any }) {
+  private async uploadProfileFiles(
+    files?: { avatarFile?: any; videoFile?: any },
+    urls?: { avatarUrl?: string; videoUrl?: string },
+  ) {
     const [avatarUpload, videoUpload] = await Promise.all([
       files?.avatarFile
-        ? this.s3StorageService.uploadFile(files.avatarFile, {
-            folder: 'daanklerk/profiles',
-            resourceType: 'image',
-            allowedMimeTypes: [
-              'image/jpeg',
-              'image/png',
-              'image/webp',
-              'image/gif',
-            ],
-            maxBytes: 5 * 1024 * 1024,
-          })
-        : Promise.resolve(null),
+        ? this.uploadProfileAvatarFile(files.avatarFile)
+        : urls?.avatarUrl?.startsWith('data:')
+          ? this.uploadProfileAvatarFile(
+              this.dataUrlToFile(urls.avatarUrl, 'profile-avatar'),
+            )
+          : Promise.resolve(null),
       files?.videoFile
-        ? this.s3StorageService.uploadFile(files.videoFile, {
-            folder: 'daanklerk/profile-videos',
-            resourceType: 'video',
-            allowedMimeTypes: [
-              'video/mp4',
-              'video/webm',
-              'video/quicktime',
-              'video/x-msvideo',
-            ],
-            maxBytes: 50 * 1024 * 1024,
-          })
-        : Promise.resolve(null),
+        ? this.uploadProfileVideoFile(files.videoFile)
+        : urls?.videoUrl?.startsWith('data:')
+          ? this.uploadProfileVideoFile(
+              this.dataUrlToFile(urls.videoUrl, 'profile-video'),
+            )
+          : Promise.resolve(null),
     ]);
 
     return {
       avatarUrl: avatarUpload?.url,
       videoUrl: videoUpload?.url,
     };
+  }
+
+  private uploadProfileAvatarFile(file: any) {
+    return this.s3StorageService.uploadFile(file, {
+      folder: 'daanklerk/profiles',
+      resourceType: 'image',
+      allowedMimeTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+      ],
+      maxBytes: 5 * 1024 * 1024,
+    });
+  }
+
+  private uploadProfileVideoFile(file: any) {
+    return this.s3StorageService.uploadFile(file, {
+      folder: 'daanklerk/profile-videos',
+      resourceType: 'video',
+      allowedMimeTypes: [
+        'video/mp4',
+        'video/webm',
+        'video/quicktime',
+        'video/x-msvideo',
+      ],
+      maxBytes: 50 * 1024 * 1024,
+    });
+  }
+
+  private dataUrlToFile(dataUrl: string, fallbackName: string) {
+    const match = dataUrl.match(/^data:([^;,]+);base64,([\s\S]+)$/);
+
+    if (!match) {
+      throw new BadRequestException('Invalid profile media data URL');
+    }
+
+    const [, mimetype, base64] = match;
+    const buffer = Buffer.from(base64.replace(/\s/g, ''), 'base64');
+
+    if (!buffer.length) {
+      throw new BadRequestException('Invalid profile media data');
+    }
+
+    return {
+      buffer,
+      mimetype,
+      size: buffer.length,
+      originalname: `${fallbackName}.${this.getMediaExtension(mimetype)}`,
+    };
+  }
+
+  private getMediaExtension(mimetype: string) {
+    const extensions: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/quicktime': 'mov',
+      'video/x-msvideo': 'avi',
+    };
+
+    return extensions[mimetype] ?? 'bin';
   }
 
   async updateApplicationStatus(profileId: string, status: ApplicationStatus) {

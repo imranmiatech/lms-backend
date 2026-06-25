@@ -2158,10 +2158,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
   }
 
   private getFrontendUrl() {
-    return (process.env.FRONTEND_URL ?? 'https://braens.eu').replace(
-      /\/$/,
-      '',
-    );
+    return 'https://braens.eu';
   }
 
   private getBackendUrl() {

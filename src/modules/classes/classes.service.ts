@@ -728,11 +728,23 @@ export class ClassesService {
   ) {
     await this.assertTutorCourse(tutorId, courseId);
 
-    const upload = file ? await this.uploadClassResourceFile(file) : null;
-    const url = upload?.url ?? dto.url;
+    const upload = file
+      ? await this.uploadClassResourceFile(file)
+      : dto.url?.startsWith('data:')
+        ? await this.uploadClassResourceFile(
+            this.dataUrlToFile(dto.url, dto.name || 'class-resource'),
+          )
+        : null;
+    const url = upload?.url ?? dto.url?.trim();
 
     if (!url) {
       throw new BadRequestException('Provide either url or file');
+    }
+
+    if (url.startsWith('blob:')) {
+      throw new BadRequestException(
+        'Blob URLs cannot be saved. Send the actual file as multipart field "file" so it can be uploaded to S3.',
+      );
     }
 
     const resource = await this.prisma.resource.create({
@@ -782,6 +794,62 @@ export class ClassesService {
       ],
       maxBytes: 20 * 1024 * 1024,
     });
+  }
+
+  private dataUrlToFile(dataUrl: string, fallbackName: string) {
+    const match = dataUrl.match(/^data:([^;,]+);base64,([\s\S]+)$/);
+
+    if (!match) {
+      throw new BadRequestException('Invalid resource data URL');
+    }
+
+    const [, mimetype, base64] = match;
+    const buffer = Buffer.from(base64.replace(/\s/g, ''), 'base64');
+
+    if (!buffer.length) {
+      throw new BadRequestException('Invalid resource file data');
+    }
+
+    return {
+      buffer,
+      mimetype,
+      size: buffer.length,
+      originalname: this.getDataUrlFileName(fallbackName, mimetype),
+    };
+  }
+
+  private getDataUrlFileName(name: string, mimetype: string) {
+    const safeName = name.trim() || 'class-resource';
+
+    if (/\.[a-z0-9]+$/i.test(safeName)) {
+      return safeName;
+    }
+
+    return `${safeName}.${this.getMediaExtension(mimetype)}`;
+  }
+
+  private getMediaExtension(mimetype: string) {
+    const extensions: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/svg+xml': 'svg',
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        'docx',
+      'application/vnd.ms-powerpoint': 'ppt',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+        'pptx',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        'xlsx',
+      'text/plain': 'txt',
+      'text/csv': 'csv',
+    };
+
+    return extensions[mimetype] ?? 'bin';
   }
 
   async deleteResource(tutorId: string, courseId: string, resourceId: string) {

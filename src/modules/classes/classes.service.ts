@@ -728,40 +728,21 @@ export class ClassesService {
   ) {
     await this.assertTutorCourse(tutorId, courseId);
 
-    const upload = file
-      ? await this.uploadClassResourceFile(file)
-      : dto.url?.startsWith('data:')
-        ? await this.uploadClassResourceFile(
-            this.dataUrlToFile(dto.url, dto.name || 'class-resource'),
-          )
-        : dto.fileBase64
-          ? await this.uploadClassResourceFile(
-              this.base64ToFile(
-                dto.fileBase64,
-                dto.mimeType,
-                dto.originalName || dto.name || 'class-resource',
-              ),
-            )
-        : null;
-    const url = upload?.url ?? dto.url?.trim();
-
-    if (!url) {
-      throw new BadRequestException('Provide either url or file');
-    }
-
-    if (url.startsWith('blob:')) {
+    if (!file) {
       throw new BadRequestException(
-        'No actual file was received. Browser blob URLs cannot be uploaded by the API. Send multipart/form-data with the real File object; do not send URL.createObjectURL(file) as url.',
+        'Resource file is required. Send multipart/form-data with field name "file".',
       );
     }
+
+    const upload = await this.uploadClassResourceFile(file);
 
     const resource = await this.prisma.resource.create({
       data: {
         tutorId,
         courseId,
         name: dto.name,
-        url,
-        size: upload ? this.formatBytes(upload.bytes) : dto.size,
+        url: upload.url,
+        size: this.formatBytes(upload.bytes),
       },
     });
 
@@ -802,91 +783,6 @@ export class ClassesService {
       ],
       maxBytes: 20 * 1024 * 1024,
     });
-  }
-
-  private dataUrlToFile(dataUrl: string, fallbackName: string) {
-    const match = dataUrl.match(/^data:([^;,]+);base64,([\s\S]+)$/);
-
-    if (!match) {
-      throw new BadRequestException('Invalid resource data URL');
-    }
-
-    const [, mimetype, base64] = match;
-    const buffer = Buffer.from(base64.replace(/\s/g, ''), 'base64');
-
-    if (!buffer.length) {
-      throw new BadRequestException('Invalid resource file data');
-    }
-
-    return {
-      buffer,
-      mimetype,
-      size: buffer.length,
-      originalname: this.getDataUrlFileName(fallbackName, mimetype),
-    };
-  }
-
-  private base64ToFile(
-    fileBase64: string,
-    mimeType: string | undefined,
-    fallbackName: string,
-  ) {
-    if (fileBase64.startsWith('data:')) {
-      return this.dataUrlToFile(fileBase64, fallbackName);
-    }
-
-    if (!mimeType) {
-      throw new BadRequestException(
-        'mimeType is required when fileBase64 has no data URL prefix',
-      );
-    }
-
-    const buffer = Buffer.from(fileBase64.replace(/\s/g, ''), 'base64');
-
-    if (!buffer.length) {
-      throw new BadRequestException('Invalid resource file data');
-    }
-
-    return {
-      buffer,
-      mimetype: mimeType,
-      size: buffer.length,
-      originalname: this.getDataUrlFileName(fallbackName, mimeType),
-    };
-  }
-
-  private getDataUrlFileName(name: string, mimetype: string) {
-    const safeName = name.trim() || 'class-resource';
-
-    if (/\.[a-z0-9]+$/i.test(safeName)) {
-      return safeName;
-    }
-
-    return `${safeName}.${this.getMediaExtension(mimetype)}`;
-  }
-
-  private getMediaExtension(mimetype: string) {
-    const extensions: Record<string, string> = {
-      'image/jpeg': 'jpg',
-      'image/png': 'png',
-      'image/webp': 'webp',
-      'image/gif': 'gif',
-      'image/svg+xml': 'svg',
-      'application/pdf': 'pdf',
-      'application/msword': 'doc',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-        'docx',
-      'application/vnd.ms-powerpoint': 'ppt',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-        'pptx',
-      'application/vnd.ms-excel': 'xls',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-        'xlsx',
-      'text/plain': 'txt',
-      'text/csv': 'csv',
-    };
-
-    return extensions[mimetype] ?? 'bin';
   }
 
   async deleteResource(tutorId: string, courseId: string, resourceId: string) {

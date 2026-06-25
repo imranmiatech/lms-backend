@@ -276,38 +276,19 @@ export class ClassesController {
     }),
   )
   @ApiOperation({ summary: 'Add resource to a tutor class' })
-  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiConsumes('multipart/form-data')
   @ApiBody({
-    required: false,
+    required: true,
     schema: {
       type: 'object',
-      required: ['name'],
+      required: ['name', 'file'],
       properties: {
         name: { type: 'string', example: 'Course Syllabus.pdf' },
-        url: {
-          type: 'string',
-          example: 'https://example.com/resources/syllabus.pdf',
-        },
         size: { type: 'string', example: '2.4 MB' },
-        fileBase64: {
-          type: 'string',
-          description:
-            'Optional base64 file content for JSON requests. May include or omit the data URL prefix.',
-          example: 'JVBERi0xLjQKJ...',
-        },
-        mimeType: {
-          type: 'string',
-          description: 'Required when fileBase64 has no data URL prefix.',
-          example: 'application/pdf',
-        },
-        originalName: {
-          type: 'string',
-          example: 'Course Syllabus.pdf',
-        },
         file: {
           type: 'string',
           format: 'binary',
-          description: 'Optional resource file. If sent, uploaded to S3.',
+          description: 'Resource file. Uploaded to S3.',
         },
       },
     },

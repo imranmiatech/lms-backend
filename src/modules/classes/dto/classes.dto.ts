@@ -56,21 +56,5 @@ export class CreateClassResourceDto {
 
   @IsOptional()
   @IsString()
-  url?: string;
-
-  @IsOptional()
-  @IsString()
   size?: string;
-
-  @IsOptional()
-  @IsString()
-  fileBase64?: string;
-
-  @IsOptional()
-  @IsString()
-  mimeType?: string;
-
-  @IsOptional()
-  @IsString()
-  originalName?: string;
 }

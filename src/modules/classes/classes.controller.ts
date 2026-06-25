@@ -7,7 +7,7 @@ import {
   ParseIntPipe,
   Post,
   Query,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -19,7 +19,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Role } from '@prisma/client';
 import { CurrentUser, Roles } from '../auth/decorators/roles.decorator';
@@ -270,7 +270,7 @@ export class ClassesController {
 
   @Post(':courseId/resources')
   @UseInterceptors(
-    FileInterceptor('file', {
+    AnyFilesInterceptor({
       storage: memoryStorage(),
       limits: { fileSize: 20 * 1024 * 1024 },
     }),
@@ -301,8 +301,9 @@ export class ClassesController {
     @CurrentUser() user: { userId: string },
     @Param('courseId') courseId: string,
     @Body() dto: CreateClassResourceDto,
-    @UploadedFile() file?: any,
+    @UploadedFiles() files?: any[],
   ) {
+    const file = files?.[0];
     return this.classesService.addResource(user.userId, courseId, dto, file);
   }
 

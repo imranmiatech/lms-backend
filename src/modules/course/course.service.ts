@@ -168,7 +168,12 @@ export class CourseService {
     };
   }
 
-  async updateCourse(courseId: string, tutorId: string, dto: CreateCourseDto) {
+  async updateCourse(
+    courseId: string,
+    tutorId: string,
+    dto: CreateCourseDto,
+    imageFile?: any,
+  ) {
     const course = await this.prisma.course.findUnique({
       where: {
         id: courseId,
@@ -193,7 +198,7 @@ export class CourseService {
       ? this.normalizeCourseLessons(dto)
       : null;
     const { curriculumItems: _curriculumItems, ...courseDto } = dto;
-    const image = await this.uploadCourseImage(dto.image);
+    const image = await this.uploadCourseImage(dto.image, imageFile);
     const updatedCourse = await this.prisma.course.update({
       where: {
         id: courseId,
@@ -528,6 +533,7 @@ export class CourseService {
       },
       select: {
         id: true,
+        tutorId: true,
         title: true,
         maxStudent: true,
         startDate: true,
@@ -582,6 +588,21 @@ export class CourseService {
       },
     });
 
+    await this.notifyTutor(course.tutorId, {
+      type: 'COURSE_ENROLLMENT',
+      title: 'New student enrolled',
+      body: `${student.fullName} enrolled in ${course.title}.`,
+      targetUrl: `/classes/${course.id}/enrolled-students`,
+      data: {
+        enrollmentId: enrollment.id,
+        courseId: course.id,
+        courseTitle: course.title,
+        studentId: student.id,
+        studentName: student.fullName,
+        studentEmail: student.email,
+      },
+    });
+
     return {
       success: true,
       message: 'Student enrolled successfully',
@@ -612,6 +633,23 @@ export class CourseService {
       });
     } catch (error) {
       console.error('Failed to create admin notification', error);
+    }
+  }
+
+  private async notifyTutor(
+    tutorId: string,
+    payload: {
+      type: string;
+      title: string;
+      body?: string;
+      targetUrl?: string;
+      data?: Record<string, unknown>;
+    },
+  ) {
+    try {
+      await this.notificationService.createForUser(tutorId, payload);
+    } catch (error) {
+      console.error('Failed to create tutor notification', error);
     }
   }
 

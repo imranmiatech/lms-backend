@@ -8,6 +8,7 @@ import {
 import { PaymentStatus, PaymentType, Prisma, Role } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AgoraService } from '../agora/agora.service';
+import { S3StorageService } from '../common/s3/s3.service';
 import {
   combineDateAndTime,
   getTimedClassStatusByDuration,
@@ -23,6 +24,7 @@ export class ClassesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agoraService: AgoraService,
+    private readonly s3StorageService: S3StorageService,
   ) {}
 
   async getTutorGroupClasses(
@@ -722,16 +724,24 @@ export class ClassesService {
     tutorId: string,
     courseId: string,
     dto: CreateClassResourceDto,
+    file?: any,
   ) {
     await this.assertTutorCourse(tutorId, courseId);
+
+    const upload = file ? await this.uploadClassResourceFile(file) : null;
+    const url = upload?.url ?? dto.url;
+
+    if (!url) {
+      throw new BadRequestException('Provide either url or file');
+    }
 
     const resource = await this.prisma.resource.create({
       data: {
         tutorId,
         courseId,
         name: dto.name,
-        url: dto.url,
-        size: dto.size,
+        url,
+        size: upload ? this.formatBytes(upload.bytes) : dto.size,
       },
     });
 
@@ -743,10 +753,35 @@ export class ClassesService {
         name: resource.name,
         url: resource.url,
         size: resource.size ?? 'N/A',
+        ...(upload && { upload }),
         downloads: resource.downloads,
         createdAt: resource.createdAt,
       },
     };
+  }
+
+  private uploadClassResourceFile(file: any) {
+    return this.s3StorageService.uploadFile(file, {
+      folder: 'daanklerk/class-resources',
+      resourceType: 'auto',
+      allowedMimeTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'image/svg+xml',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+        'text/csv',
+      ],
+      maxBytes: 20 * 1024 * 1024,
+    });
   }
 
   async deleteResource(tutorId: string, courseId: string, resourceId: string) {
@@ -1079,6 +1114,18 @@ export class ClassesService {
       month: 'short',
       day: 'numeric',
     });
+  }
+
+  private formatBytes(bytes: number) {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
   private formatTime(date: Date) {

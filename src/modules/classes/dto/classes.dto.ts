@@ -54,9 +54,9 @@ export class CreateClassResourceDto {
   @IsNotEmpty()
   name!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  url!: string;
+  url?: string;
 
   @IsOptional()
   @IsString()

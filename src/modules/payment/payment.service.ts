@@ -1648,6 +1648,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         id: true,
         courseId: true,
         userId: true,
+        tutorId: true,
         type: true,
         amount: true,
         status: true,
@@ -1727,6 +1728,22 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
           amount: payment.amount,
         },
       });
+
+      await this.notifyTutor(payment.tutorId, {
+        type: 'COURSE_ENROLLMENT',
+        title: 'New student enrolled',
+        body: `${payment.user.fullName} enrolled in ${payment.course?.title ?? 'your course'}.`,
+        targetUrl: `/classes/${payment.courseId}/enrolled-students`,
+        data: {
+          paymentId: payment.id,
+          courseId: payment.courseId,
+          courseTitle: payment.course?.title,
+          studentId: payment.user.id,
+          studentName: payment.user.fullName,
+          studentEmail: payment.user.email,
+          amount: payment.amount,
+        },
+      });
     }
   }
 
@@ -1745,6 +1762,23 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
       });
     } catch (error) {
       console.error('Failed to create admin notification', error);
+    }
+  }
+
+  private async notifyTutor(
+    tutorId: string,
+    payload: {
+      type: string;
+      title: string;
+      body?: string;
+      targetUrl?: string;
+      data?: Record<string, unknown>;
+    },
+  ) {
+    try {
+      await this.notificationService.createForUser(tutorId, payload);
+    } catch (error) {
+      console.error('Failed to create tutor notification', error);
     }
   }
 

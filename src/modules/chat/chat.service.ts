@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { S3StorageService } from '../common/s3/s3.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto, EditMessageDto } from './dto/send-message.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
@@ -11,7 +12,10 @@ import { MessageType } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly s3StorageService: S3StorageService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
   //  Conversations
@@ -214,9 +218,12 @@ export class ChatService {
     conversationId: string,
     senderId: string,
     dto: SendMessageDto,
+    file?: any,
   ) {
     // Ensure the sender is a participant
     await this._assertParticipant(conversationId, senderId);
+
+    const upload = file ? await this.uploadChatAttachment(file) : null;
 
     const message = await this.prisma.message.create({
       data: {
@@ -224,7 +231,7 @@ export class ChatService {
         senderId,
         content: dto.content,
         messageType: dto.messageType ?? MessageType.TEXT,
-        fileUrl: dto.fileUrl,
+        fileUrl: upload?.url ?? dto.fileUrl,
       },
       include: {
         sender: {
@@ -246,6 +253,29 @@ export class ChatService {
     });
 
     return message;
+  }
+
+  private uploadChatAttachment(file: any) {
+    return this.s3StorageService.uploadFile(file, {
+      folder: 'daanklerk/chat-attachments',
+      resourceType: 'auto',
+      allowedMimeTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+        'text/csv',
+      ],
+      maxBytes: 20 * 1024 * 1024,
+    });
   }
 
   /**

@@ -9,16 +9,21 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBody,
   ApiBearerAuth,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 
 import { AuthGuard } from '../auth/guards/auth.guard';
 import { CurrentUser } from '../auth/decorators/roles.decorator';
@@ -128,14 +133,42 @@ export class ChatController {
   // ─────────────────────────────────────────────────────────────────────────
 
   @Post('conversations/:conversationId/messages')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 20 * 1024 * 1024 },
+    }),
+  )
   @ApiOperation({
     summary: 'Send a message via REST (WebSocket fallback)',
     description:
       'Send a message using HTTP. The message is also broadcasted to WebSocket clients in the conversation room.',
   })
   @ApiParam({ name: 'conversationId', description: 'Conversation UUID' })
+  @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({
-    type: SendMessageDto,
+    required: true,
+    schema: {
+      type: 'object',
+      required: ['content'],
+      properties: {
+        content: { type: 'string', example: 'Hello everyone' },
+        messageType: {
+          type: 'string',
+          enum: ['TEXT', 'IMAGE', 'FILE'],
+          example: 'FILE',
+        },
+        fileUrl: {
+          type: 'string',
+          example: 'https://storage.example.com/files/lesson.pdf',
+        },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Optional attachment. If sent, uploaded to S3.',
+        },
+      },
+    },
     examples: {
       text: {
         summary: 'Text message',
@@ -171,11 +204,13 @@ export class ChatController {
     @CurrentUser() user: { userId: string },
     @Param('conversationId') conversationId: string,
     @Body() dto: SendMessageDto,
+    @UploadedFile() file?: any,
   ) {
     const message = await this.chatService.sendMessage(
       conversationId,
       user.userId,
       dto,
+      file,
     );
 
     // Also broadcast to WebSocket room so real-time clients receive it

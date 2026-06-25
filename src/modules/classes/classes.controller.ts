@@ -7,14 +7,20 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { Role } from '@prisma/client';
 import { CurrentUser, Roles } from '../auth/decorators/roles.decorator';
 import { AuthGuard } from '../auth/guards/auth.guard';
@@ -263,13 +269,41 @@ export class ClassesController {
   }
 
   @Post(':courseId/resources')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 20 * 1024 * 1024 },
+    }),
+  )
   @ApiOperation({ summary: 'Add resource to a tutor class' })
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiBody({
+    required: false,
+    schema: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        name: { type: 'string', example: 'Course Syllabus.pdf' },
+        url: {
+          type: 'string',
+          example: 'https://example.com/resources/syllabus.pdf',
+        },
+        size: { type: 'string', example: '2.4 MB' },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Optional resource file. If sent, uploaded to S3.',
+        },
+      },
+    },
+  })
   addResource(
     @CurrentUser() user: { userId: string },
     @Param('courseId') courseId: string,
     @Body() dto: CreateClassResourceDto,
+    @UploadedFile() file?: any,
   ) {
-    return this.classesService.addResource(user.userId, courseId, dto);
+    return this.classesService.addResource(user.userId, courseId, dto, file);
   }
 
   @Delete(':courseId/resources/:resourceId')

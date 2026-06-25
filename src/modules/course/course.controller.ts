@@ -272,7 +272,14 @@ export class CourseController {
   @UseGuards(AuthGuard)
   @Roles(Role.TUTOR, Role.ADMIN)
   @ApiBearerAuth()
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
   @ApiOperation({ summary: 'Update a course (Tutor/Admin only)' })
+  @ApiConsumes('multipart/form-data', 'application/json')
   @ApiResponse({ status: 200, description: 'Course updated successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden.' })
@@ -281,8 +288,9 @@ export class CourseController {
     @Param('id') id: string,
     @CurrentUser() user: { userId: string },
     @Body() dto: CreateCourseDto,
+    @UploadedFile() image?: any,
   ) {
-    return this.courseService.updateCourse(id, user.userId, dto);
+    return this.courseService.updateCourse(id, user.userId, dto, image);
   }
 
   @Delete(':id')

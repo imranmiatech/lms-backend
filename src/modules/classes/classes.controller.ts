@@ -289,6 +289,21 @@ export class ClassesController {
           example: 'https://example.com/resources/syllabus.pdf',
         },
         size: { type: 'string', example: '2.4 MB' },
+        fileBase64: {
+          type: 'string',
+          description:
+            'Optional base64 file content for JSON requests. May include or omit the data URL prefix.',
+          example: 'JVBERi0xLjQKJ...',
+        },
+        mimeType: {
+          type: 'string',
+          description: 'Required when fileBase64 has no data URL prefix.',
+          example: 'application/pdf',
+        },
+        originalName: {
+          type: 'string',
+          example: 'Course Syllabus.pdf',
+        },
         file: {
           type: 'string',
           format: 'binary',

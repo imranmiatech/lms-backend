@@ -734,6 +734,14 @@ export class ClassesService {
         ? await this.uploadClassResourceFile(
             this.dataUrlToFile(dto.url, dto.name || 'class-resource'),
           )
+        : dto.fileBase64
+          ? await this.uploadClassResourceFile(
+              this.base64ToFile(
+                dto.fileBase64,
+                dto.mimeType,
+                dto.originalName || dto.name || 'class-resource',
+              ),
+            )
         : null;
     const url = upload?.url ?? dto.url?.trim();
 
@@ -743,7 +751,7 @@ export class ClassesService {
 
     if (url.startsWith('blob:')) {
       throw new BadRequestException(
-        'Blob URLs cannot be saved. Send the actual file as multipart field "file" so it can be uploaded to S3.',
+        'No actual file was received. Browser blob URLs cannot be uploaded by the API. Send multipart/form-data with the real File object; do not send URL.createObjectURL(file) as url.',
       );
     }
 
@@ -815,6 +823,35 @@ export class ClassesService {
       mimetype,
       size: buffer.length,
       originalname: this.getDataUrlFileName(fallbackName, mimetype),
+    };
+  }
+
+  private base64ToFile(
+    fileBase64: string,
+    mimeType: string | undefined,
+    fallbackName: string,
+  ) {
+    if (fileBase64.startsWith('data:')) {
+      return this.dataUrlToFile(fileBase64, fallbackName);
+    }
+
+    if (!mimeType) {
+      throw new BadRequestException(
+        'mimeType is required when fileBase64 has no data URL prefix',
+      );
+    }
+
+    const buffer = Buffer.from(fileBase64.replace(/\s/g, ''), 'base64');
+
+    if (!buffer.length) {
+      throw new BadRequestException('Invalid resource file data');
+    }
+
+    return {
+      buffer,
+      mimetype: mimeType,
+      size: buffer.length,
+      originalname: this.getDataUrlFileName(fallbackName, mimeType),
     };
   }
 

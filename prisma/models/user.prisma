@@ -22,9 +22,9 @@ model User {
   givenReviews          Review[]                  @relation("StudentReviews")
   notifications         Notification[]
   profile               UserProfile?
-  payments              Payment[]                  @relation("StudentPayments")
-  tutorPayments         Payment[]                  @relation("TutorPayments")
-  liveClassMessages     LiveClassMessage[]          @relation("LiveClassMessages")
+  payments              Payment[]                 @relation("StudentPayments")
+  tutorPayments         Payment[]                 @relation("TutorPayments")
+  liveClassMessages     LiveClassMessage[]        @relation("LiveClassMessages")
   adminProfile          AdminProfile?
   notifyCourseUpdates   Boolean                   @default(true)
   notifyNewContent      Boolean                   @default(true)

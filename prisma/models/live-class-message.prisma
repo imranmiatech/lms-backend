@@ -9,22 +9,22 @@ enum LiveClassMessageType {
 }
 
 model LiveClassMessage {
-  id              String               @id @default(uuid())
-  roomType        LiveClassRoomType
-  courseId        String?
-  curriculumIndex Int?
-  paymentId       String?
-  senderId        String
-  messageType     LiveClassMessageType @default(TEXT)
-  content         String?
-  resourceName    String?
-  resourceUrl     String?
+  id               String               @id @default(uuid())
+  roomType         LiveClassRoomType
+  courseId         String?
+  curriculumIndex  Int?
+  paymentId        String?
+  senderId         String
+  messageType      LiveClassMessageType @default(TEXT)
+  content          String?
+  resourceName     String?
+  resourceUrl      String?
   resourceMimeType String?
-  resourceSize    String?
-  isDeleted       Boolean              @default(false)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  sender          User                 @relation("LiveClassMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  resourceSize     String?
+  isDeleted        Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  sender           User                 @relation("LiveClassMessages", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([roomType, courseId, curriculumIndex, createdAt])
   @@index([roomType, paymentId, createdAt])

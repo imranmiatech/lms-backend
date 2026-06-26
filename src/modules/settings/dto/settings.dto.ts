@@ -1,10 +1,13 @@
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -13,13 +16,13 @@ export class CreatePaymentDto {
     example: 'Bank Transfer',
   })
   @IsString()
-  paymentMethod: string;
+  paymentMethod!: string;
 
   @ApiProperty({
     example: 'Md Imran Mia',
   })
   @IsString()
-  legalName: string;
+  legalName!: string;
 
   @ApiProperty({
     example: 'Dutch Bangla Bank',
@@ -52,7 +55,6 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   routingNumber?: string;
-
 }
 
 export class UpdateSettingsDto {
@@ -99,9 +101,7 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsString()
   routingNumber?: string;
-
 }
-
 
 export class ChangePasswordDto {
   @IsString()
@@ -154,6 +154,20 @@ export class UpdateNotificationPreferencesDto {
   notifyWeeklyDigest?: boolean;
 }
 
+export class LegalContentSectionDto {
+  @ApiProperty({
+    example: 'Information We Collect',
+  })
+  @IsString()
+  title!: string;
+
+  @ApiProperty({
+    example: 'We collect information you provide when creating an account.',
+  })
+  @IsString()
+  description!: string;
+}
+
 export class UpsertLegalContentDto {
   @ApiPropertyOptional({
     example: 'Privacy policy content...',
@@ -163,11 +177,52 @@ export class UpsertLegalContentDto {
   privacyPolicy?: string;
 
   @ApiPropertyOptional({
+    type: [LegalContentSectionDto],
+    example: [
+      {
+        title: 'Information We Collect',
+        description:
+          'We collect information you provide when creating an account.',
+      },
+      {
+        title: 'How We Use Information',
+        description:
+          'We use information to provide lessons and improve the platform.',
+      },
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LegalContentSectionDto)
+  privacyPolicySections?: LegalContentSectionDto[];
+
+  @ApiPropertyOptional({
     example: 'Terms and conditions content...',
   })
   @IsOptional()
   @IsString()
   termsAndConditions?: string;
+
+  @ApiPropertyOptional({
+    type: [LegalContentSectionDto],
+    example: [
+      {
+        title: 'Account Terms',
+        description: 'You are responsible for maintaining your account.',
+      },
+      {
+        title: 'Lesson Booking',
+        description:
+          'Bookings are subject to tutor availability and platform rules.',
+      },
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LegalContentSectionDto)
+  termsAndConditionsSections?: LegalContentSectionDto[];
 }
 
 export class UpsertPlatformSettingsDto {

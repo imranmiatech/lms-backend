@@ -63,6 +63,7 @@ type StudentLesson = {
   };
   startsAt: Date;
   endsAt: Date;
+  timeZone: string;
   dateLabel: string;
   timeLabel: string;
   durationMinutes: number;
@@ -398,6 +399,7 @@ export class StudentLessonsService {
         },
         startsAt,
         endsAt,
+        timeZone: course.timeZone,
         dateLabel: this.formatDate(startsAt),
         timeLabel: this.formatTimeRange(startsAt, endsAt),
         durationMinutes: course.classDuration,
@@ -420,6 +422,7 @@ export class StudentLessonsService {
       tutor: lesson.tutor,
       startsAt: lesson.startsAt,
       endsAt: lesson.endsAt,
+      timeZone: lesson.timeZone,
       dateLabel: lesson.dateLabel,
       timeLabel: lesson.timeLabel,
       durationMinutes: lesson.durationMinutes,

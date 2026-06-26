@@ -12,7 +12,10 @@ type DashboardLesson = {
   courseTitle: string;
   title: string;
   date: Date;
+  startsAt: Date;
+  endsAt: Date;
   time: string;
+  timeZone: string;
   status: 'completed' | 'live' | 'upcoming';
 };
 
@@ -851,7 +854,10 @@ export class DashboardService {
       image: lesson.courseImage,
       tutor: lesson.tutor,
       date: lesson.date,
+      startsAt: lesson.startsAt,
+      endsAt: lesson.endsAt,
       time: lesson.time,
+      timeZone: lesson.timeZone,
       duration: {
         minutes: lesson.durationMinutes,
         label: this.formatDuration(lesson.durationMinutes),
@@ -868,6 +874,9 @@ export class DashboardService {
       title: lesson.title,
       courseTitle: lesson.courseTitle,
       tutorName: lesson.tutor.name,
+      startsAt: lesson.startsAt,
+      endsAt: lesson.endsAt,
+      timeZone: lesson.timeZone,
       time: lesson.date.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
@@ -1027,6 +1036,10 @@ export class DashboardService {
     return lessonItems.map((item, index) => {
       const date = new Date(item.date);
       const lessonDate = combineDateAndTime(date, item.time, course.timeZone);
+      const durationMinutes = this.getSessionDuration(course);
+      const endsAt = new Date(
+        lessonDate.getTime() + durationMinutes * 60 * 1000,
+      );
 
       return {
         id: `${course.id}-${index}`,
@@ -1034,12 +1047,11 @@ export class DashboardService {
         courseTitle: course.title,
         title: item.title,
         date: lessonDate,
+        startsAt: lessonDate,
+        endsAt,
         time: item.time,
-        status: this.getLessonStatus(
-          lessonDate,
-          this.getSessionDuration(course),
-          now,
-        ),
+        timeZone: course.timeZone,
+        status: this.getLessonStatus(lessonDate, durationMinutes, now),
       };
     });
   }
@@ -1183,7 +1195,10 @@ export class DashboardService {
       courseTitle: lesson.courseTitle,
       title: lesson.title,
       date: lesson.date,
+      startsAt: lesson.startsAt,
+      endsAt: lesson.endsAt,
       time: lesson.time,
+      timeZone: lesson.timeZone,
       status: lesson.status,
     };
   }

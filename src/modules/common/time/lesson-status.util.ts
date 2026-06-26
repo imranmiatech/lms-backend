@@ -76,14 +76,105 @@ export function combineDateAndTime(
     return new Date(date);
   }
 
-  if (timeZone) {
-    return getZonedDateTime(date, parsed.hours, parsed.minutes, timeZone);
+  const normalizedTimeZone = normalizeTimeZone(timeZone);
+
+  if (normalizedTimeZone?.type === 'offset') {
+    return getOffsetDateTime(
+      date,
+      parsed.hours,
+      parsed.minutes,
+      normalizedTimeZone.offsetMinutes,
+    );
+  }
+
+  if (normalizedTimeZone?.type === 'iana') {
+    return getZonedDateTime(
+      date,
+      parsed.hours,
+      parsed.minutes,
+      normalizedTimeZone.timeZone,
+    );
   }
 
   const combined = new Date(date);
   combined.setHours(parsed.hours, parsed.minutes, 0, 0);
 
   return combined;
+}
+
+function normalizeTimeZone(
+  timeZone?: string | null,
+):
+  | { type: 'iana'; timeZone: string }
+  | { type: 'offset'; offsetMinutes: number }
+  | null {
+  if (!timeZone?.trim()) {
+    return null;
+  }
+
+  const normalized = timeZone.trim();
+  const alias = TIME_ZONE_ALIASES[normalized.toLowerCase()];
+
+  if (alias) {
+    return { type: 'iana', timeZone: alias };
+  }
+
+  const offset = parseTimeZoneOffset(normalized);
+
+  if (offset !== null) {
+    return { type: 'offset', offsetMinutes: offset };
+  }
+
+  return { type: 'iana', timeZone: normalized };
+}
+
+const TIME_ZONE_ALIASES: Record<string, string> = {
+  bdt: 'Asia/Dhaka',
+  bangladesh: 'Asia/Dhaka',
+  'bangladesh standard time': 'Asia/Dhaka',
+  dhaka: 'Asia/Dhaka',
+  gmt: 'UTC',
+  utc: 'UTC',
+};
+
+function parseTimeZoneOffset(timeZone: string) {
+  const match = timeZone.match(
+    /\b(?:utc|gmt)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?\b/i,
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[2]);
+  const minutes = match[3] ? Number(match[3]) : 0;
+
+  if (hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  const totalMinutes = hours * 60 + minutes;
+
+  return match[1] === '-' ? -totalMinutes : totalMinutes;
+}
+
+function getOffsetDateTime(
+  date: Date,
+  hours: number,
+  minutes: number,
+  offsetMinutes: number,
+) {
+  const localTime = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    hours,
+    minutes,
+    0,
+    0,
+  );
+
+  return new Date(localTime - offsetMinutes * 60 * 1000);
 }
 
 function getZonedDateTime(

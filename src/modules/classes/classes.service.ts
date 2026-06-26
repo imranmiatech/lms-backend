@@ -130,16 +130,22 @@ export class ClassesService {
                 id: currentOrNextLesson.id,
                 title: currentOrNextLesson.title,
                 date: currentOrNextLesson.date,
+                startsAt: currentOrNextLesson.startsAt,
+                endsAt: currentOrNextLesson.endsAt,
                 dateLabel: this.formatShortDate(currentOrNextLesson.date),
                 time: currentOrNextLesson.time,
+                timeZone: currentOrNextLesson.timeZone,
                 status: currentOrNextLesson.status,
               }
             : {
                 id: null,
                 title: null,
                 date: null,
+                startsAt: null,
+                endsAt: null,
                 dateLabel: 'Completed',
                 time: null,
+                timeZone: null,
                 status: 'completed',
               },
           price: `$${course.pricePerStudent}`,
@@ -308,7 +314,10 @@ export class ClassesService {
               id: nextLesson.id,
               title: nextLesson.title,
               date: nextLesson.date,
+              startsAt: nextLesson.startsAt,
+              endsAt: nextLesson.endsAt,
               time: nextLesson.time,
+              timeZone: nextLesson.timeZone,
               status: nextLesson.status,
             }
           : null,
@@ -362,7 +371,10 @@ export class ClassesService {
                 id: nextLesson.id,
                 title: nextLesson.title,
                 date: nextLesson.date,
+                startsAt: nextLesson.startsAt,
+                endsAt: nextLesson.endsAt,
                 time: nextLesson.time,
+                timeZone: nextLesson.timeZone,
                 status: nextLesson.status,
               }
             : null,
@@ -590,7 +602,10 @@ export class ClassesService {
         id: lesson.id,
         title: lesson.title,
         date: lesson.date,
+        startsAt: lesson.startsAt,
+        endsAt: lesson.endsAt,
         time: lesson.time,
+        timeZone: lesson.timeZone,
         status: lesson.status,
         attendant:
           lesson.status === 'completed'
@@ -626,7 +641,10 @@ export class ClassesService {
           curriculumIndex,
           title: lesson.title,
           date: lesson.date,
+          startsAt: lesson.startsAt,
+          endsAt: lesson.endsAt,
           time: lesson.time,
+          timeZone: lesson.timeZone,
           durationMinutes: lesson.durationMinutes,
           status: lesson.status,
           enrolledStudents,
@@ -676,7 +694,10 @@ export class ClassesService {
           curriculumIndex,
           title: lesson.title,
           date: lesson.date,
+          startsAt: lesson.startsAt,
+          endsAt: lesson.endsAt,
           time: lesson.time,
+          timeZone: lesson.timeZone,
           durationMinutes: lesson.durationMinutes,
           status: lesson.status,
         },
@@ -891,6 +912,7 @@ export class ClassesService {
         startsAt,
         endsAt,
         time: item.time,
+        timeZone: course.timeZone,
         dateLabel: this.formatDate(date),
         timeLabel: this.formatTime(startsAt),
         durationMinutes,
@@ -919,16 +941,20 @@ export class ClassesService {
 
     return lessonItems.map((item, index) => {
       const date = new Date(item.date);
-      const lessonDate = combineDateAndTime(date, item.time, course.timeZone);
+      const startsAt = combineDateAndTime(date, item.time, course.timeZone);
       const durationMinutes = this.getSessionDuration(course);
+      const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
 
       return {
         id: `${course.id}-${index}`,
         title: item.title || `Session ${index + 1}`,
         date,
+        startsAt,
+        endsAt,
         time: item.time,
+        timeZone: course.timeZone,
         durationMinutes,
-        status: this.getLessonStatus(lessonDate, durationMinutes),
+        status: this.getLessonStatus(startsAt, durationMinutes),
       };
     });
   }
@@ -992,16 +1018,20 @@ export class ClassesService {
 
     return this.getCourseLessonItems(course).map((item, index) => {
       const date = new Date(item.date);
-      const lessonDate = combineDateAndTime(date, item.time, course.timeZone);
+      const startsAt = combineDateAndTime(date, item.time, course.timeZone);
       const durationMinutes = this.getSessionDuration(course);
+      const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
 
       return {
         id: `${courseId}-${index}`,
         title: item.title,
         date,
+        startsAt,
+        endsAt,
         time: item.time,
+        timeZone: course.timeZone,
         durationMinutes,
-        status: this.getLessonStatus(lessonDate, durationMinutes),
+        status: this.getLessonStatus(startsAt, durationMinutes),
       };
     });
   }
@@ -1022,7 +1052,10 @@ export class ClassesService {
       id: string;
       title: string;
       date: Date;
+      startsAt: Date;
+      endsAt: Date;
       time: string;
+      timeZone: string;
       status: string;
     }[],
   ) {

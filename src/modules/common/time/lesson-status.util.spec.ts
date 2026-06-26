@@ -40,4 +40,20 @@ describe('lesson-status.util', () => {
 
     expect(startsAt.toISOString()).toBe('2026-06-26T13:58:00.000Z');
   });
+
+  it.each([
+    ['UTC-5 (EST)', '2026-06-26T19:00:00.000Z'],
+    ['UTC-8 (PST)', '2026-06-26T22:00:00.000Z'],
+    ['UTC+0 (GMT)', '2026-06-26T14:00:00.000Z'],
+    ['UTC+1 (CET)', '2026-06-26T13:00:00.000Z'],
+    ['UTC+8 (CST)', '2026-06-26T06:00:00.000Z'],
+  ])('supports frontend dropdown timezone value %s', (timeZone, expected) => {
+    const startsAt = combineDateAndTime(
+      new Date('2026-06-26T00:00:00.000Z'),
+      '14:00',
+      timeZone,
+    );
+
+    expect(startsAt.toISOString()).toBe(expected);
+  });
 });

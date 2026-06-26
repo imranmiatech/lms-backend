@@ -79,8 +79,7 @@ export class CourseController {
         },
         extraInfos: {
           type: 'string',
-          example:
-            '["8 live sessions per week","Certificate of completion"]',
+          example: '["8 live sessions per week","Certificate of completion"]',
           description: 'JSON array string or comma-separated text.',
         },
         topics: {
@@ -110,7 +109,19 @@ export class CourseController {
         },
         startDate: { type: 'string', example: '2026-07-06' },
         time: { type: 'string', example: '14:00' },
-        timeZone: { type: 'string', example: 'UTC-5 (EST)' },
+        timeZone: {
+          type: 'string',
+          example: 'UTC-5 (EST)',
+          enum: [
+            'UTC-5 (EST)',
+            'UTC-8 (PST)',
+            'UTC+0 (GMT)',
+            'UTC+1 (CET)',
+            'UTC+8 (CST)',
+          ],
+          description:
+            'Frontend dropdown timezone label. IANA timezone names such as Asia/Dhaka are also supported.',
+        },
         classDuration: { type: 'number', example: 45 },
         language: { type: 'string', example: 'English' },
         courseDuration: { type: 'number', example: 8 },
@@ -129,11 +140,7 @@ export class CourseController {
     @CurrentUser() user: { userId: string },
     @UploadedFile() image?: any,
   ) {
-    return this.courseService.createCourse(
-      user.userId,
-      createCourseDto,
-      image,
-    );
+    return this.courseService.createCourse(user.userId, createCourseDto, image);
   }
 
   @Get('upcoming')

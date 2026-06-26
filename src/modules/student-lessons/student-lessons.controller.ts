@@ -21,13 +21,13 @@ import { StudentLessonsService } from './student-lessons.service';
 
 @ApiTags('Student Lessons')
 @Controller('student-lessons')
-@UseGuards(AuthGuard, RolesGuard)
-@Roles(Role.STUDENT)
-@ApiBearerAuth()
 export class StudentLessonsController {
   constructor(private readonly studentLessonsService: StudentLessonsService) {}
 
   @Get()
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get student lesson panel data' })
   listLessons(
     @CurrentUser() user: { userId: string },
@@ -38,16 +38,16 @@ export class StudentLessonsController {
 
   @Get('reviews')
   @ApiOperation({
-    summary: 'Get all tutor reviews, highest ratings first',
+    summary: 'Get recent 12 tutor reviews, highest ratings first',
   })
-  getAllReviews(
-    @CurrentUser() user: { userId: string },
-    @Query() query: StudentLessonReviewListQueryDto,
-  ) {
-    return this.studentLessonsService.getAllReviews(user.userId, query);
+  getAllReviews() {
+    return this.studentLessonsService.getAllReviews();
   }
 
   @Get(':lessonId/join-preview')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get join modal details for a student lesson' })
   getJoinPreview(
     @CurrentUser() user: { userId: string },
@@ -57,6 +57,9 @@ export class StudentLessonsController {
   }
 
   @Post(':lessonId/join')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Join a student lesson and receive Agora RTC credentials',
   })
@@ -68,6 +71,9 @@ export class StudentLessonsController {
   }
 
   @Get(':lessonId/review')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get tutor reviews for a student lesson, highest ratings first',
   })
@@ -84,6 +90,9 @@ export class StudentLessonsController {
   }
 
   @Post(':lessonId/review')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Submit or update the review shown from completed lessons',
   })

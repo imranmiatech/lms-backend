@@ -371,14 +371,8 @@ export class StudentLessonsService {
     };
   }
 
-  async getAllReviews(
-    studentId: string,
-    query: StudentLessonReviewListQueryDto,
-  ) {
-    await this.assertStudent(studentId);
-
-    const page = Math.max(1, query.page ?? 1);
-    const limit = Math.max(1, Math.min(50, query.limit ?? 10));
+  async getAllReviews() {
+    const limit = 12;
 
     const [
       totalReviews,
@@ -403,7 +397,6 @@ export class StudentLessonsService {
       this.prisma.review.count({ where: { rating: 1 } }),
       this.prisma.review.findMany({
         orderBy: [{ rating: 'desc' }, { createdAt: 'desc' }],
-        skip: (page - 1) * limit,
         take: limit,
         include: this.getReviewInclude(),
       }),
@@ -416,7 +409,6 @@ export class StudentLessonsService {
       2: twoStarCount,
       1: oneStarCount,
     };
-    const totalPages = Math.ceil(totalReviews / limit);
 
     return {
       success: true,
@@ -435,12 +427,9 @@ export class StudentLessonsService {
           }),
         },
         reviews: reviews.map((review) => this.serializeReview(review)),
-        pagination: {
-          page,
+        meta: {
           limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPreviousPage: page > 1,
+          returned: reviews.length,
         },
       },
     };

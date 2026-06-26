@@ -12,6 +12,7 @@ import {
 } from '../common/time/lesson-status.util';
 import {
   StudentLessonQueryDto,
+  StudentLessonReviewListQueryDto,
   StudentLessonReviewDto,
 } from './dto/student-lessons.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -80,6 +81,28 @@ type LessonStateOverride = {
   status: string;
   reason: string | null;
 };
+
+type ReviewWithPeople = Prisma.ReviewGetPayload<{
+  include: {
+    reviewer: {
+      select: {
+        id: true;
+        fullName: true;
+        profile: {
+          select: {
+            avatarUrl: true;
+          };
+        };
+      };
+    };
+    tutorProfile: {
+      select: {
+        id: true;
+        userId: true;
+      };
+    };
+  };
+}>;
 
 @Injectable()
 export class StudentLessonsService {
@@ -219,6 +242,7 @@ export class StudentLessonsService {
         rating: dto.rating,
         comment: dto.comment,
       },
+      include: this.getReviewInclude(),
     });
 
     await this.updateTutorReviewStats(lesson.tutor.profileId);
@@ -228,7 +252,121 @@ export class StudentLessonsService {
       message: 'Review submitted successfully',
       data: {
         lessonId,
-        review,
+        review: this.serializeReview(review),
+      },
+    };
+  }
+
+  async getLessonReviews(
+    studentId: string,
+    lessonId: string,
+    query: StudentLessonReviewListQueryDto,
+  ) {
+    const lesson = await this.assertStudentLesson(studentId, lessonId);
+
+    if (!lesson.tutor.profileId) {
+      throw new BadRequestException(
+        'Tutor profile is not available for reviews',
+      );
+    }
+
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.max(1, Math.min(50, query.limit ?? 10));
+    const where: Prisma.ReviewWhereInput = {
+      tutorProfileId: lesson.tutor.profileId,
+    };
+
+    const [
+      totalReviews,
+      ratingStats,
+      fiveStarCount,
+      fourStarCount,
+      threeStarCount,
+      twoStarCount,
+      oneStarCount,
+      reviews,
+      currentStudentReview,
+    ] = await this.prisma.$transaction([
+      this.prisma.review.count({ where }),
+      this.prisma.review.aggregate({
+        where,
+        _avg: {
+          rating: true,
+        },
+      }),
+      this.prisma.review.count({ where: { ...where, rating: 5 } }),
+      this.prisma.review.count({ where: { ...where, rating: 4 } }),
+      this.prisma.review.count({ where: { ...where, rating: 3 } }),
+      this.prisma.review.count({ where: { ...where, rating: 2 } }),
+      this.prisma.review.count({ where: { ...where, rating: 1 } }),
+      this.prisma.review.findMany({
+        where,
+        orderBy: [{ rating: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: this.getReviewInclude(),
+      }),
+      this.prisma.review.findUnique({
+        where: {
+          reviewerId_tutorProfileId: {
+            reviewerId: studentId,
+            tutorProfileId: lesson.tutor.profileId,
+          },
+        },
+        include: this.getReviewInclude(),
+      }),
+    ]);
+
+    const ratingCounts = {
+      5: fiveStarCount,
+      4: fourStarCount,
+      3: threeStarCount,
+      2: twoStarCount,
+      1: oneStarCount,
+    };
+    const totalPages = Math.ceil(totalReviews / limit);
+
+    return {
+      success: true,
+      data: {
+        lesson: {
+          id: lesson.id,
+          courseId: lesson.courseId,
+          curriculumIndex: lesson.curriculumIndex,
+          title: lesson.title,
+          courseTitle: lesson.courseTitle,
+        },
+        tutor: {
+          id: lesson.tutor.id,
+          tutorId: lesson.tutor.id,
+          profileId: lesson.tutor.profileId,
+          name: lesson.tutor.name,
+          avatarUrl: lesson.tutor.avatarUrl,
+        },
+        summary: {
+          totalReviews,
+          averageRating: Number((ratingStats._avg.rating ?? 0).toFixed(1)),
+          ratingBreakdown: [5, 4, 3, 2, 1].map((star) => {
+            const count = ratingCounts[star as keyof typeof ratingCounts];
+            const percentage =
+              totalReviews > 0
+                ? Number(((count / totalReviews) * 100).toFixed(2))
+                : 0;
+
+            return { star, count, percentage };
+          }),
+        },
+        currentStudentReview: currentStudentReview
+          ? this.serializeReview(currentStudentReview)
+          : null,
+        reviews: reviews.map((review) => this.serializeReview(review)),
+        pagination: {
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
       },
     };
   }
@@ -430,6 +568,50 @@ export class StudentLessonsService {
       joinAvailable: lesson.joinAvailable,
       canReview: lesson.status === 'completed',
       review: lesson.review,
+    };
+  }
+
+  private getReviewInclude() {
+    return {
+      reviewer: {
+        select: {
+          id: true,
+          fullName: true,
+          profile: {
+            select: {
+              avatarUrl: true,
+            },
+          },
+        },
+      },
+      tutorProfile: {
+        select: {
+          id: true,
+          userId: true,
+        },
+      },
+    } satisfies Prisma.ReviewInclude;
+  }
+
+  private serializeReview(review: ReviewWithPeople) {
+    return {
+      id: review.id,
+      tutorId: review.tutorProfile.userId,
+      tutorProfileId: review.tutorProfileId,
+      reviewerId: review.reviewerId,
+      reviewerName: review.reviewer.fullName || 'Anonymous',
+      reviewerImage: review.reviewer.profile?.avatarUrl ?? null,
+      name: review.reviewer.fullName || 'Anonymous',
+      image: review.reviewer.profile?.avatarUrl ?? null,
+      reviewer: {
+        id: review.reviewer.id,
+        name: review.reviewer.fullName || 'Anonymous',
+        avatarUrl: review.reviewer.profile?.avatarUrl ?? null,
+      },
+      rating: review.rating,
+      comment: review.comment,
+      createdAt: review.createdAt,
+      updatedAt: review.updatedAt,
     };
   }
 

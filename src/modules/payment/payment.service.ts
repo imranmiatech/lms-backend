@@ -431,7 +431,9 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
 
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
 
-    if (!this.isInsideAnyAvailability(startsAt, endsAt, tutorProfile.availability)) {
+    if (
+      !this.isInsideAnyAvailability(startsAt, endsAt, tutorProfile.availability)
+    ) {
       throw new BadRequestException(
         'Selected time is outside tutor availability',
       );
@@ -601,7 +603,9 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
 
   private assertFuturePrivateLesson(startsAt: Date) {
     if (startsAt <= new Date()) {
-      throw new BadRequestException('Private lesson time must be in the future');
+      throw new BadRequestException(
+        'Private lesson time must be in the future',
+      );
     }
   }
 
@@ -615,7 +619,11 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
     return this.dayIndexToDayOfWeek(parsedDate.getUTCDay());
   }
 
-  private getDayOfWeekFromParts(parts: { year: number; month: number; day: number }) {
+  private getDayOfWeekFromParts(parts: {
+    year: number;
+    month: number;
+    day: number;
+  }) {
     return this.dayIndexToDayOfWeek(
       new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay(),
     );
@@ -1520,7 +1528,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (requestedStatus === 'live' || requestedStatus === 'completed') {
-      where.status = PaymentStatus.PAID;
+      where.status = { in: [PaymentStatus.PENDING, PaymentStatus.PAID] };
     }
 
     const querySkip =
@@ -1653,7 +1661,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (requestedStatus === 'live' || requestedStatus === 'completed') {
-      where.status = PaymentStatus.PAID;
+      where.status = { in: [PaymentStatus.PENDING, PaymentStatus.PAID] };
     }
 
     const querySkip = requestedStatus ? 0 : skip;
@@ -2674,7 +2682,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
       status,
       paymentStatus: this.formatPaymentStatus(payment.status),
       payoutStatus: payment.payoutStatus.toLowerCase(),
-      canJoin: status === 'live',
+      canJoin: payment.status === PaymentStatus.PAID && status === 'live',
       createdAt: payment.createdAt,
       updatedAt: payment.updatedAt,
     };
@@ -2690,10 +2698,6 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
       paymentStatus === PaymentStatus.FAILED
     ) {
       return 'cancelled';
-    }
-
-    if (paymentStatus === PaymentStatus.PENDING) {
-      return 'upcoming';
     }
 
     return getTimedClassStatus(startsAt, endsAt);

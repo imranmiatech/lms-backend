@@ -14,6 +14,7 @@ import { AuthGuard } from '../auth/guards/auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import {
   StudentLessonQueryDto,
+  StudentLessonReviewListQueryDto,
   StudentLessonReviewDto,
 } from './dto/student-lessons.dto';
 import { StudentLessonsService } from './student-lessons.service';
@@ -53,6 +54,22 @@ export class StudentLessonsController {
     @Param('lessonId') lessonId: string,
   ) {
     return this.studentLessonsService.joinLesson(user.userId, lessonId);
+  }
+
+  @Get(':lessonId/review')
+  @ApiOperation({
+    summary: 'Get tutor reviews for a student lesson, highest ratings first',
+  })
+  getLessonReviews(
+    @CurrentUser() user: { userId: string },
+    @Param('lessonId') lessonId: string,
+    @Query() query: StudentLessonReviewListQueryDto,
+  ) {
+    return this.studentLessonsService.getLessonReviews(
+      user.userId,
+      lessonId,
+      query,
+    );
   }
 
   @Post(':lessonId/review')

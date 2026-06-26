@@ -9,4 +9,9 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('platform/meta')
+  getPlatformMeta() {
+    return this.appService.getPlatformMeta();
+  }
 }

@@ -371,6 +371,81 @@ export class StudentLessonsService {
     };
   }
 
+  async getAllReviews(
+    studentId: string,
+    query: StudentLessonReviewListQueryDto,
+  ) {
+    await this.assertStudent(studentId);
+
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.max(1, Math.min(50, query.limit ?? 10));
+
+    const [
+      totalReviews,
+      ratingStats,
+      fiveStarCount,
+      fourStarCount,
+      threeStarCount,
+      twoStarCount,
+      oneStarCount,
+      reviews,
+    ] = await this.prisma.$transaction([
+      this.prisma.review.count(),
+      this.prisma.review.aggregate({
+        _avg: {
+          rating: true,
+        },
+      }),
+      this.prisma.review.count({ where: { rating: 5 } }),
+      this.prisma.review.count({ where: { rating: 4 } }),
+      this.prisma.review.count({ where: { rating: 3 } }),
+      this.prisma.review.count({ where: { rating: 2 } }),
+      this.prisma.review.count({ where: { rating: 1 } }),
+      this.prisma.review.findMany({
+        orderBy: [{ rating: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: this.getReviewInclude(),
+      }),
+    ]);
+
+    const ratingCounts = {
+      5: fiveStarCount,
+      4: fourStarCount,
+      3: threeStarCount,
+      2: twoStarCount,
+      1: oneStarCount,
+    };
+    const totalPages = Math.ceil(totalReviews / limit);
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalReviews,
+          averageRating: Number((ratingStats._avg.rating ?? 0).toFixed(1)),
+          ratingBreakdown: [5, 4, 3, 2, 1].map((star) => {
+            const count = ratingCounts[star as keyof typeof ratingCounts];
+            const percentage =
+              totalReviews > 0
+                ? Number(((count / totalReviews) * 100).toFixed(2))
+                : 0;
+
+            return { star, count, percentage };
+          }),
+        },
+        reviews: reviews.map((review) => this.serializeReview(review)),
+        pagination: {
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      },
+    };
+  }
+
   private async assertStudent(studentId: string) {
     const student = await this.prisma.user.findFirst({
       where: {

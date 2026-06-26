@@ -36,6 +36,17 @@ export class StudentLessonsController {
     return this.studentLessonsService.listLessons(user.userId, query);
   }
 
+  @Get('reviews')
+  @ApiOperation({
+    summary: 'Get all tutor reviews, highest ratings first',
+  })
+  getAllReviews(
+    @CurrentUser() user: { userId: string },
+    @Query() query: StudentLessonReviewListQueryDto,
+  ) {
+    return this.studentLessonsService.getAllReviews(user.userId, query);
+  }
+
   @Get(':lessonId/join-preview')
   @ApiOperation({ summary: 'Get join modal details for a student lesson' })
   getJoinPreview(

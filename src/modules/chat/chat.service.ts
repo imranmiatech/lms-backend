@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3StorageService } from '../common/s3/s3.service';
+import { ChatPresenceService } from './chat-presence.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto, EditMessageDto } from './dto/send-message.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
@@ -15,6 +16,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3StorageService: S3StorageService,
+    private readonly chatPresenceService: ChatPresenceService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -80,7 +82,10 @@ export class ChatService {
     });
 
     if (existing) {
-      return { conversation: existing, isNew: false };
+      return {
+        conversation: this.attachPresenceToConversation(existing),
+        isNew: false,
+      };
     }
 
     // Create new conversation with both participants
@@ -108,7 +113,10 @@ export class ChatService {
       },
     });
 
-    return { conversation, isNew: true };
+    return {
+      conversation: this.attachPresenceToConversation(conversation),
+      isNew: true,
+    };
   }
 
   /**
@@ -164,7 +172,10 @@ export class ChatService {
           },
         });
 
-        return { ...conv, unreadCount };
+        return {
+          ...this.attachPresenceToConversation(conv),
+          unreadCount,
+        };
       }),
     );
 
@@ -203,7 +214,7 @@ export class ChatService {
       throw new ForbiddenException('You are not part of this conversation');
     }
 
-    return conversation;
+    return this.attachPresenceToConversation(conversation);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -411,5 +422,29 @@ export class ChatService {
     });
     if (!msg) throw new NotFoundException('Cursor message not found');
     return msg.createdAt;
+  }
+
+  private attachPresenceToConversation<T extends { participants: any[] }>(
+    conversation: T,
+  ) {
+    return {
+      ...conversation,
+      participants: conversation.participants.map((participant) => {
+        const isOnline = this.chatPresenceService.isUserOnline(
+          participant.userId,
+        );
+
+        return {
+          ...participant,
+          isOnline,
+          user: participant.user
+            ? {
+                ...participant.user,
+                isOnline,
+              }
+            : participant.user,
+        };
+      }),
+    };
   }
 }

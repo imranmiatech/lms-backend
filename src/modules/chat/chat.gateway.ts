@@ -14,6 +14,7 @@ import { Server } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 
 import { ChatService } from './chat.service';
+import { ChatPresenceService } from './chat-presence.service';
 import { WsAuthGuard } from './guards/ws-auth.guard';
 import type {
   AuthenticatedSocket,
@@ -45,7 +46,10 @@ export class ChatGateway
 
   private readonly logger = new Logger(ChatGateway.name);
 
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly chatPresenceService: ChatPresenceService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
   //  Lifecycle Hooks
@@ -72,9 +76,25 @@ export class ChatGateway
       ) as JwtUserPayload;
 
       client.user = decoded;
+      const connectionCount = this.chatPresenceService.addConnection(
+        decoded.userId,
+        client.id,
+      );
+
       this.logger.log(
         `Client connected: ${client.id} | User: ${decoded.email} (${decoded.role})`,
       );
+
+      client.emit('presenceSnapshot', {
+        onlineUserIds: this.chatPresenceService.getOnlineUserIds(),
+      });
+
+      if (connectionCount === 1) {
+        this.server.emit('userPresence', {
+          userId: decoded.userId,
+          isOnline: true,
+        });
+      }
     } catch {
       this.logger.warn(`Unauthorized connection attempt: ${client.id}`);
       client.disconnect();
@@ -82,6 +102,20 @@ export class ChatGateway
   }
 
   handleDisconnect(client: AuthenticatedSocket) {
+    if (client.user?.userId) {
+      const remainingConnections = this.chatPresenceService.removeConnection(
+        client.user.userId,
+        client.id,
+      );
+
+      if (remainingConnections === 0) {
+        this.server.emit('userPresence', {
+          userId: client.user.userId,
+          isOnline: false,
+        });
+      }
+    }
+
     this.logger.log(
       `Client disconnected: ${client.id}${client.user ? ` | User: ${client.user.email}` : ''}`,
     );

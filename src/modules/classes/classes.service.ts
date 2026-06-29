@@ -148,7 +148,7 @@ export class ClassesService {
                 timeZone: null,
                 status: 'completed',
               },
-          price: `$${course.pricePerStudent}`,
+          price: `€${course.pricePerStudent}`,
           enrolled: {
             current: course._count.enrollments,
             max: course.maxStudent,

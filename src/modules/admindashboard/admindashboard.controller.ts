@@ -341,19 +341,19 @@ export class AdminDashboardController {
           summary: {
             totalRevenue: {
               amount: 328500,
-              amountLabel: '$328,500',
+              amountLabel: '€328,500',
             },
             commissionRevenue: {
               amount: 65700,
-              amountLabel: '$65,700',
+              amountLabel: '€65,700',
             },
             pendingPayments: {
               amount: 8450,
-              amountLabel: '$8,450',
+              amountLabel: '€8,450',
             },
             completedPayouts: {
               amount: 262800,
-              amountLabel: '$262,800',
+              amountLabel: '€262,800',
             },
           },
           transactions: [
@@ -372,8 +372,8 @@ export class AdminDashboardController {
               },
               course: null,
               amount: 94,
-              amountLabel: '$94',
-              currency: 'usd',
+              amountLabel: '€94',
+              currency: 'eur',
               type: 'PRIVATE',
               typeLabel: 'Private',
               date: '2026-05-20T10:41:00.000Z',
@@ -401,8 +401,8 @@ export class AdminDashboardController {
                 title: 'Computer Science Basics',
               },
               amount: 120,
-              amountLabel: '$120',
-              currency: 'usd',
+              amountLabel: '€120',
+              currency: 'eur',
               type: 'GROUP',
               typeLabel: 'Group',
               date: '2026-01-19T11:23:00.000Z',
@@ -479,7 +479,7 @@ export class AdminDashboardController {
                 email: 'georgia.young@example.com',
               },
               amount: 80,
-              amountLabel: '$80',
+              amountLabel: '€80',
               grossAmount: 100,
               commissionAmount: 20,
               method: 'Bank Transfer',
@@ -578,7 +578,7 @@ export class AdminDashboardController {
               status: 'PAID',
               statusLabel: 'Active',
               amount: 94,
-              amountLabel: '$94',
+              amountLabel: '€94',
             },
             {
               bookingId: 'payment_02',
@@ -607,7 +607,7 @@ export class AdminDashboardController {
               status: 'PAID',
               statusLabel: 'Active',
               amount: 40,
-              amountLabel: '$40',
+              amountLabel: '€40',
             },
           ],
           filters: {

@@ -24,7 +24,7 @@ model Payment {
   tutorId               String
   courseId              String?
   amount                Float
-  currency              String        @default("usd")
+  currency              String        @default("eur")
   status                PaymentStatus @default(PENDING)
   type                  PaymentType
   payoutStatus          PayoutStatus  @default(PENDING)

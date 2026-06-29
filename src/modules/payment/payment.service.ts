@@ -193,7 +193,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         tutorId: course.tutorId,
         courseId: course.id,
         amount,
-        currency: 'usd',
+        currency: 'eur',
         status: PaymentStatus.PENDING,
         type: PaymentType.GROUP,
         payoutStatus: PayoutStatus.PENDING,
@@ -314,7 +314,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
           userId,
           tutorId: tutor.id,
           amount,
-          currency: 'usd',
+          currency: 'eur',
           status: PaymentStatus.PENDING,
           type: PaymentType.PRIVATE,
           payoutStatus: PayoutStatus.PENDING,
@@ -893,7 +893,10 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
 
     return {
       success: true,
-      data: payments,
+      data: payments.map((payment) => ({
+        ...payment,
+        currency: this.getDisplayCurrencyCode(),
+      })),
     };
   }
 
@@ -2267,7 +2270,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
     try {
       const transfer = await this.stripe.transfers.create({
         amount: Math.round(payment.tutorAmount * 100),
-        currency: payment.currency,
+        currency: this.getDisplayCurrencyCode(),
         destination: stripeAccountId,
         metadata: {
           paymentId: payment.id,
@@ -2450,7 +2453,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         sessionCount,
       },
       amount: payment.amount,
-      currency: payment.currency,
+      currency: this.getDisplayCurrencyCode(),
       status,
       paymentStatus: this.formatPaymentStatus(payment.status),
       payoutStatus: payment.payoutStatus.toLowerCase(),
@@ -2508,6 +2511,10 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
       process.env.API_URL ??
       'https://api.braens.eu'
     ).replace(/\/$/, '');
+  }
+
+  private getDisplayCurrencyCode() {
+    return 'eur';
   }
 
   private calculateCommission(amount: number) {
@@ -2678,7 +2685,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
       tutorAmount: payment.tutorAmount,
       holdUntil: payment.holdUntil,
       paidOutAt: payment.paidOutAt,
-      currency: payment.currency,
+      currency: this.getDisplayCurrencyCode(),
       status,
       paymentStatus: this.formatPaymentStatus(payment.status),
       payoutStatus: payment.payoutStatus.toLowerCase(),

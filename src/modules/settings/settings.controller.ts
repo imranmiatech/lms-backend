@@ -10,8 +10,9 @@ import {
     CreatePaymentDto,
     UpdateNotificationPreferencesDto,
     UpdateSettingsDto,
-    UpsertLegalContentDto,
     UpsertPlatformSettingsDto,
+    UpsertPrivacyPolicyDto,
+    UpsertTermsAndConditionsDto,
 } from './dto/settings.dto';
 
 @ApiTags('Settings')
@@ -124,22 +125,40 @@ export class SettingsController {
         return this.settingsService.getPlatformSettings();
     }
 
-    @Post('legal-content')
+    @Post('legal-content/privacy-policy')
     @UseGuards(AuthGuard, RolesGuard)
     @Roles(Role.ADMIN)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Create or update platform privacy policy and terms (Admin only)' })
-    upsertLegalContent(@Body() dto: UpsertLegalContentDto) {
-        return this.settingsService.upsertLegalContent(dto);
+    @ApiOperation({ summary: 'Create or update platform privacy policy (Admin only)' })
+    upsertPrivacyPolicy(@Body() dto: UpsertPrivacyPolicyDto) {
+        return this.settingsService.upsertPrivacyPolicy(dto);
     }
 
-    @Patch('legal-content')
+    @Patch('legal-content/privacy-policy')
     @UseGuards(AuthGuard, RolesGuard)
     @Roles(Role.ADMIN)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Update platform privacy policy and terms, creating them first if missing (Admin only)' })
-    updateLegalContent(@Body() dto: UpsertLegalContentDto) {
-        return this.settingsService.upsertLegalContent(dto);
+    @ApiOperation({ summary: 'Update platform privacy policy, creating it first if missing (Admin only)' })
+    updatePrivacyPolicy(@Body() dto: UpsertPrivacyPolicyDto) {
+        return this.settingsService.upsertPrivacyPolicy(dto);
+    }
+
+    @Post('legal-content/terms-and-conditions')
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles(Role.ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create or update platform terms and conditions (Admin only)' })
+    upsertTermsAndConditions(@Body() dto: UpsertTermsAndConditionsDto) {
+        return this.settingsService.upsertTermsAndConditions(dto);
+    }
+
+    @Patch('legal-content/terms-and-conditions')
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles(Role.ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Update platform terms and conditions, creating them first if missing (Admin only)' })
+    updateTermsAndConditions(@Body() dto: UpsertTermsAndConditionsDto) {
+        return this.settingsService.upsertTermsAndConditions(dto);
     }
 
     @Get('legal-content')

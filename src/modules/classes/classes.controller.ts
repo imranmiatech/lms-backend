@@ -141,7 +141,7 @@ export class ClassesController {
               time: '2:20 pm',
               status: 'upcoming',
             },
-            price: '$206',
+            price: '€206',
             enrolled: {
               current: 8,
               max: 15,

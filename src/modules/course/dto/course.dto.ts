@@ -202,9 +202,9 @@ export enum CourseSubjectFilter {
 
 export enum CoursePriceFilter {
   ALL = 'All Prices',
-  ZERO_TO_FORTY = '$0 - $40/hr',
-  FORTY_TO_SIXTY = '$40 - $60/hr',
-  SIXTY_PLUS = '$60+/hr',
+  ZERO_TO_FORTY = '€0 - €40/hr',
+  FORTY_TO_SIXTY = '€40 - €60/hr',
+  SIXTY_PLUS = '€60+/hr',
 }
 
 export enum UpcomingCourseDateFilter {

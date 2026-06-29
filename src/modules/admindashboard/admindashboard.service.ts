@@ -1194,7 +1194,7 @@ export class AdminDashboardService {
           commissionAmountLabel: this.formatCurrency(payment.commissionAmount),
           tutorAmount: payment.tutorAmount,
           tutorAmountLabel: this.formatCurrency(payment.tutorAmount),
-          currency: payment.currency,
+          currency: 'eur',
           type: payment.type,
           typeLabel: this.formatPaymentType(payment.type),
           date: payment.createdAt,
@@ -1311,7 +1311,7 @@ export class AdminDashboardService {
             commissionAmountLabel: this.formatCurrency(
               payment.commissionAmount,
             ),
-            currency: payment.currency,
+            currency: 'eur',
             method:
               payment.tutor.paymentInfo?.paymentMethod ?? 'Stripe Connect',
             date,
@@ -2117,7 +2117,7 @@ export class AdminDashboardService {
     return Number((amount * commissionRate).toFixed(2));
   }
 
-  private formatCurrency(amount: number, currency = 'USD') {
+  private formatCurrency(amount: number, currency = 'EUR') {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency,

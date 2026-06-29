@@ -81,7 +81,7 @@ export class UserProfileResponseDto {
   yearOfExperience!: number | null;
 
   /**
-   * Price per hour in USD.
+   * Price per hour in EUR.
    * @example 25.0
    */
   pricePerHour!: number | null;

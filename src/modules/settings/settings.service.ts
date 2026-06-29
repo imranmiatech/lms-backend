@@ -10,7 +10,9 @@ import {
   UpdateNotificationPreferencesDto,
   UpdateSettingsDto,
   UpsertLegalContentDto,
+  UpsertPrivacyPolicyDto,
   UpsertPlatformSettingsDto,
+  UpsertTermsAndConditionsDto,
 } from './dto/settings.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -18,6 +20,15 @@ import * as bcrypt from 'bcrypt';
 
 const LEGAL_CONTENT_ID = 'platform_legal_content';
 const PLATFORM_SETTINGS_ID = 'platform_settings';
+const LEGACY_LEGAL_CONTENT_PREFIX = '__LEGAL_CONTENT_V1__:';
+type LegalContentUpsertData = Omit<
+  Prisma.PlatformLegalContentUncheckedCreateInput,
+  'id'
+>;
+type LegacyLegalContentPayload = {
+  content: string | null;
+  sections: Array<{ title: string; description: string }>;
+};
 
 @Injectable()
 export class SettingsService {
@@ -209,31 +220,21 @@ export class SettingsService {
   }
 
   async upsertLegalContent(dto: UpsertLegalContentDto ) {
-    const content = await this.prisma.platformLegalContent.upsert({
-      where: {
-        id: LEGAL_CONTENT_ID,
-      },
-      update: {
-        ...(dto.privacyPolicy !== undefined && {
-          privacyPolicy: dto.privacyPolicy,
-        }),
-        ...(dto.privacyPolicySections !== undefined && {
-          privacyPolicySections: dto.privacyPolicySections as unknown as Prisma.InputJsonValue,
-        }),
-        ...(dto.termsAndConditions !== undefined && {
-          termsAndConditions: dto.termsAndConditions,
-        }),
-        ...(dto.termsAndConditionsSections !== undefined && {
-          termsAndConditionsSections: dto.termsAndConditionsSections as unknown as Prisma.InputJsonValue,
-        }),
-      },
-      create: {
-        id: LEGAL_CONTENT_ID,
+    const content = await this.saveLegalContent({
+      ...(dto.privacyPolicy !== undefined && {
         privacyPolicy: dto.privacyPolicy,
-        privacyPolicySections: dto.privacyPolicySections as unknown as Prisma.InputJsonValue,
+      }),
+      ...(dto.privacyPolicySections !== undefined && {
+        privacyPolicySections:
+          dto.privacyPolicySections as unknown as Prisma.InputJsonValue,
+      }),
+      ...(dto.termsAndConditions !== undefined && {
         termsAndConditions: dto.termsAndConditions,
-        termsAndConditionsSections: dto.termsAndConditionsSections as unknown as Prisma.InputJsonValue,
-      },
+      }),
+      ...(dto.termsAndConditionsSections !== undefined && {
+        termsAndConditionsSections:
+          dto.termsAndConditionsSections as unknown as Prisma.InputJsonValue,
+      }),
     });
 
     return {
@@ -241,6 +242,96 @@ export class SettingsService {
       message: 'Legal content saved successfully',
       data: content,
     };
+  }
+
+  async upsertPrivacyPolicy(dto: UpsertPrivacyPolicyDto) {
+    const content = await this.saveLegalContent({
+      ...(dto.privacyPolicy !== undefined && {
+        privacyPolicy: dto.privacyPolicy,
+      }),
+      ...(dto.privacyPolicySections !== undefined && {
+        privacyPolicySections:
+          dto.privacyPolicySections as unknown as Prisma.InputJsonValue,
+      }),
+    });
+
+    return {
+      success: true,
+      message: 'Privacy policy saved successfully',
+      data: {
+        privacyPolicy: content.privacyPolicy,
+        privacyPolicySections: content.privacyPolicySections,
+      },
+    };
+  }
+
+  async upsertTermsAndConditions(dto: UpsertTermsAndConditionsDto) {
+    const content = await this.saveLegalContent({
+      ...(dto.termsAndConditions !== undefined && {
+        termsAndConditions: dto.termsAndConditions,
+      }),
+      ...(dto.termsAndConditionsSections !== undefined && {
+        termsAndConditionsSections:
+          dto.termsAndConditionsSections as unknown as Prisma.InputJsonValue,
+      }),
+    });
+
+    return {
+      success: true,
+      message: 'Terms and conditions saved successfully',
+      data: {
+        termsAndConditions: content.termsAndConditions,
+        termsAndConditionsSections: content.termsAndConditionsSections,
+      },
+    };
+  }
+
+  private async saveLegalContent(
+    data: LegalContentUpsertData,
+  ) {
+    try {
+      return await this.prisma.platformLegalContent.upsert({
+        where: {
+          id: LEGAL_CONTENT_ID,
+        },
+        update: data,
+        create: {
+          id: LEGAL_CONTENT_ID,
+          ...data,
+        },
+      });
+    } catch (error) {
+      if (!this.isMissingLegalContentSectionsColumnError(error)) {
+        throw error;
+      }
+
+      const legacyData = this.buildLegacyLegalContentData(data);
+
+      const legacyContent = await this.prisma.platformLegalContent.upsert({
+        where: {
+          id: LEGAL_CONTENT_ID,
+        },
+        update: legacyData,
+        create: {
+          id: LEGAL_CONTENT_ID,
+          ...legacyData,
+        },
+        select: {
+          id: true,
+          privacyPolicy: true,
+          termsAndConditions: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return {
+        ...this.normalizeLegacyLegalContentRecord(legacyContent),
+        id: legacyContent.id,
+        createdAt: legacyContent.createdAt,
+        updatedAt: legacyContent.updatedAt,
+      };
+    }
   }
 
   async upsertPlatformSettings(dto: UpsertPlatformSettingsDto) {
@@ -328,11 +419,52 @@ export class SettingsService {
   }
 
   private async findLegalContent() {
-    const content = await this.prisma.platformLegalContent.findUnique({
-      where: {
-        id: LEGAL_CONTENT_ID,
-      },
-    });
+    let content:
+      | Awaited<ReturnType<typeof this.prisma.platformLegalContent.findUnique>>
+      | {
+          id: string;
+          privacyPolicy: string | null;
+          privacyPolicySections: never[];
+          termsAndConditions: string | null;
+          termsAndConditionsSections: never[];
+          createdAt: Date | null;
+          updatedAt: Date | null;
+        }
+      | null;
+
+    try {
+      content = await this.prisma.platformLegalContent.findUnique({
+        where: {
+          id: LEGAL_CONTENT_ID,
+        },
+      });
+    } catch (error) {
+      if (!this.isMissingLegalContentSectionsColumnError(error)) {
+        throw error;
+      }
+
+      const legacyContent = await this.prisma.platformLegalContent.findUnique({
+        where: {
+          id: LEGAL_CONTENT_ID,
+        },
+        select: {
+          id: true,
+          privacyPolicy: true,
+          termsAndConditions: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      content = legacyContent
+        ? {
+            ...this.normalizeLegacyLegalContentRecord(legacyContent),
+            id: legacyContent.id,
+            createdAt: legacyContent.createdAt,
+            updatedAt: legacyContent.updatedAt,
+          }
+        : null;
+    }
 
     return (
       content ?? {
@@ -344,6 +476,155 @@ export class SettingsService {
         createdAt: null,
         updatedAt: null,
       }
+    );
+  }
+
+  private isMissingLegalContentSectionsColumnError(error: unknown) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    if (error.code !== 'P2022') {
+      return false;
+    }
+
+    const meta = error.meta as
+      | {
+          column?: string;
+          driverAdapterError?: {
+            cause?: {
+              column?: string;
+              originalMessage?: string;
+            };
+          };
+        }
+      | undefined;
+    const column = String(
+      meta?.column ?? meta?.driverAdapterError?.cause?.column ?? '',
+    );
+    const originalMessage = String(
+      meta?.driverAdapterError?.cause?.originalMessage ?? '',
+    );
+
+    return (
+      column.includes('privacyPolicySections') ||
+      column.includes('termsAndConditionsSections') ||
+      originalMessage.includes('privacyPolicySections') ||
+      originalMessage.includes('termsAndConditionsSections')
+    );
+  }
+
+  private buildLegacyLegalContentData(data: LegalContentUpsertData) {
+    const legacyData: {
+      privacyPolicy?: string | null;
+      termsAndConditions?: string | null;
+    } = {};
+
+    if (
+      data.privacyPolicy !== undefined ||
+      data.privacyPolicySections !== undefined
+    ) {
+      legacyData.privacyPolicy = this.serializeLegacyLegalContentField(
+        data.privacyPolicy,
+        data.privacyPolicySections,
+      );
+    }
+
+    if (
+      data.termsAndConditions !== undefined ||
+      data.termsAndConditionsSections !== undefined
+    ) {
+      legacyData.termsAndConditions = this.serializeLegacyLegalContentField(
+        data.termsAndConditions,
+        data.termsAndConditionsSections,
+      );
+    }
+
+    return legacyData;
+  }
+
+  private serializeLegacyLegalContentField(
+    content: string | null | undefined,
+    sections:
+      | Prisma.InputJsonValue
+      | Prisma.NullableJsonNullValueInput
+      | undefined,
+  ) {
+    const payload: LegacyLegalContentPayload = {
+      content: content ?? null,
+      sections: this.normalizeSectionsInput(sections),
+    };
+
+    return `${LEGACY_LEGAL_CONTENT_PREFIX}${JSON.stringify(payload)}`;
+  }
+
+  private normalizeLegacyLegalContentRecord(content: {
+    privacyPolicy: string | null;
+    termsAndConditions: string | null;
+  }) {
+    const privacyPolicy = this.deserializeLegacyLegalContentField(
+      content.privacyPolicy,
+    );
+    const termsAndConditions = this.deserializeLegacyLegalContentField(
+      content.termsAndConditions,
+    );
+
+    return {
+      privacyPolicy: privacyPolicy.content,
+      privacyPolicySections: privacyPolicy.sections,
+      termsAndConditions: termsAndConditions.content,
+      termsAndConditionsSections: termsAndConditions.sections,
+    };
+  }
+
+  private deserializeLegacyLegalContentField(value: string | null) {
+    if (!value?.startsWith(LEGACY_LEGAL_CONTENT_PREFIX)) {
+      return {
+        content: value,
+        sections: [],
+      };
+    }
+
+    try {
+      const payload = JSON.parse(
+        value.slice(LEGACY_LEGAL_CONTENT_PREFIX.length),
+      ) as Partial<LegacyLegalContentPayload>;
+
+      return {
+        content: typeof payload.content === 'string' ? payload.content : null,
+        sections: Array.isArray(payload.sections)
+          ? payload.sections.filter(this.isLegalContentSection)
+          : [],
+      };
+    } catch {
+      return {
+        content: value,
+        sections: [],
+      };
+    }
+  }
+
+  private normalizeSectionsInput(
+    sections:
+      | Prisma.InputJsonValue
+      | Prisma.NullableJsonNullValueInput
+      | undefined,
+  ) {
+    if (!Array.isArray(sections)) {
+      return [];
+    }
+
+    return sections.filter(this.isLegalContentSection);
+  }
+
+  private isLegalContentSection(
+    section: unknown,
+  ): section is { title: string; description: string } {
+    return (
+      typeof section === 'object' &&
+      section !== null &&
+      typeof (section as { title?: unknown }).title === 'string' &&
+      typeof (section as { description?: unknown }).description === 'string'
     );
   }
 }

@@ -45,7 +45,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
 
   // Enable CORS for local frontend, Swagger, and VS Code Live Server.'https://braens.vercel.app'
-  const frontend = process.env.FRONTEND_URL ||'http://localhost:5173' || 'https://braens.vercel.app';
+  const frontend = process.env.FRONTEND_URL || 'https://braens.eu' ||'http://localhost:5173' || 'https://braens.vercel.app';
   const configuredOrigins = frontend.includes(',')
     ? frontend.split(',').map((s) => s.trim())
     : [frontend.trim()];
@@ -54,7 +54,7 @@ async function bootstrap() {
       ...configuredOrigins,
       'https://braens.vercel.app',
       'http://localhost:5173',
-      // 'https://braens.eu'
+      'https://braens.eu'
     ]),
   );
 

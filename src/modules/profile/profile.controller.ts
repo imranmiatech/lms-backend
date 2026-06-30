@@ -2,11 +2,13 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  UnsupportedMediaTypeException,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -186,8 +188,7 @@ const updateProfileExample = {
 
 const createProfileApiBody = {
   required: true,
-  description:
-    'Use application/json for URL fields, or multipart/form-data when uploading avatarFile/videoFile.',
+  description: 'Use multipart/form-data for all profile create fields.',
   schema: {
     type: 'object',
     required: ['userId'],
@@ -272,11 +273,16 @@ export class ProfileController {
     ),
   )
   @ApiOperation({ summary: 'Create user profile details without login' })
-  @ApiConsumes('application/json', 'multipart/form-data')
+  @ApiConsumes('multipart/form-data')
   @ApiBody(createProfileApiBody)
   @ApiResponse({ status: 201, description: 'Profile created successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid input.' })
+  @ApiResponse({
+    status: 415,
+    description: 'Only multipart/form-data is supported.',
+  })
   createMyProfile(
+    @Headers('content-type') contentType: string | undefined,
     @Body() dto: PublicCreateProfileDto,
     @UploadedFiles()
     files?: {
@@ -284,6 +290,12 @@ export class ProfileController {
       videoFile?: any[];
     },
   ) {
+    if (!contentType?.toLowerCase().includes('multipart/form-data')) {
+      throw new UnsupportedMediaTypeException(
+        'Only multipart/form-data is supported for /profile/create',
+      );
+    }
+
     const normalizedDto = this.normalizeProfileBody(
       dto,
     ) as PublicCreateProfileDto;
@@ -339,8 +351,15 @@ export class ProfileController {
   }
 
   private normalizeProfileBody<T extends Record<string, any>>(dto: T): T {
+    const normalizedVideoUrl =
+      dto.videoUrl ?? (dto as T & { vedioUrl?: unknown }).vedioUrl;
+
     return {
       ...dto,
+      videoUrl:
+        typeof normalizedVideoUrl === 'string'
+          ? normalizedVideoUrl
+          : undefined,
       yearOfExperience: this.toNumber(dto.yearOfExperience),
       pricePerHour: this.toNumber(dto.pricePerHour),
       sessionDuration: this.toNumber(dto.sessionDuration),

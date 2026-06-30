@@ -13,6 +13,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { combineDateAndTime } from '../common/time/lesson-status.util';
 import { S3StorageService } from '../common/s3/s3.service';
+import { ReviewService } from '../review/review.service';
 import {
   AvailabilityDto,
   CreateProfileDto,
@@ -24,6 +25,7 @@ export class ProfileService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3StorageService: S3StorageService,
+    private readonly reviewService: ReviewService,
   ) {}
 
   async createProfile(
@@ -174,27 +176,31 @@ export class ProfileService {
   }
 
   async getProfile(userId: string, availabilityDate?: string) {
-    const [profile, completedCourses] = await Promise.all([
-      this.prisma.userProfile.findUnique({
+    const profile =
+      (await this.prisma.userProfile.findUnique({
         where: { userId },
         include: this.profileInclude(),
-      }),
-      this.prisma.courseCompletion.findMany({
-        where: {
-          course: {
-            tutorId: userId,
-          },
-        },
-        distinct: ['courseId'],
-        select: {
-          courseId: true,
-        },
-      }),
-    ]);
+      })) ??
+      (await this.prisma.userProfile.findUnique({
+        where: { id: userId },
+        include: this.profileInclude(),
+      }));
 
     if (!profile) {
       throw new NotFoundException('Profile not found');
     }
+
+    const completedCourses = await this.prisma.courseCompletion.findMany({
+      where: {
+        course: {
+          tutorId: profile.userId,
+        },
+      },
+      distinct: ['courseId'],
+      select: {
+        courseId: true,
+      },
+    });
 
     const privateBookingAvailability =
       profile.user.role === Role.TUTOR
@@ -204,11 +210,16 @@ export class ProfileService {
       profile.user.role === Role.TUTOR
         ? this.addDatesToAvailability(profile.availability, availabilityDate)
         : profile.availability;
+    const reviewSummary =
+      profile.user.role === Role.TUTOR
+        ? await this.reviewService.findTutorReviewList(profile.id, 1, 5)
+        : undefined;
 
     return {
       ...profile,
       availability: availabilityWithDates,
       completedCoursesCount: completedCourses.length,
+      ...(reviewSummary && reviewSummary),
       ...(privateBookingAvailability && { privateBookingAvailability }),
     };
   }

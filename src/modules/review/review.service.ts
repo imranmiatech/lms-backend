@@ -273,6 +273,25 @@ export class ReviewService {
     });
 
     const totalPages = Math.ceil(totalReviews / pageSize);
+    const studentIds = [...new Set(reviews.map((review) => review.reviewerId))];
+    const lessonProgressCounts =
+      studentIds.length > 0
+        ? await this.prisma.curriculumProgress.groupBy({
+            by: ['studentId'],
+            where: {
+              studentId: { in: studentIds },
+              course: {
+                tutorId: reviews[0]?.tutorProfile.userId,
+              },
+            },
+            _count: {
+              _all: true,
+            },
+          })
+        : [];
+    const lessonCountByStudentId = new Map(
+      lessonProgressCounts.map((item) => [item.studentId, item._count._all]),
+    );
 
     return {
       totalReviews,
@@ -286,6 +305,8 @@ export class ReviewService {
         tutorId: review.tutorProfile.userId,
         studentName: review.reviewer.fullName || 'Anonymous',
         studentAvatar: review.reviewer.profile?.avatarUrl ?? null,
+        totalLessonsCompleted:
+          lessonCountByStudentId.get(review.reviewerId) ?? 0,
         rating: review.rating,
         comment: review.comment,
         reviewDate: review.createdAt,

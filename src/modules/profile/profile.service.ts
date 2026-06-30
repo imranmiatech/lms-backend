@@ -175,7 +175,12 @@ export class ProfileService {
     };
   }
 
-  async getProfile(userId: string, availabilityDate?: string) {
+  async getProfile(
+    userId: string,
+    availabilityDate?: string,
+    reviewPage: number = 1,
+    reviewLimit: number = 5,
+  ) {
     const profile =
       (await this.prisma.userProfile.findUnique({
         where: { userId },
@@ -212,7 +217,11 @@ export class ProfileService {
         : profile.availability;
     const reviewSummary =
       profile.user.role === Role.TUTOR
-        ? await this.reviewService.findTutorReviewList(profile.id, 1, 5)
+        ? await this.reviewService.findTutorReviewList(
+            profile.id,
+            reviewPage,
+            reviewLimit,
+          )
         : undefined;
 
     return {

@@ -65,6 +65,7 @@ type StudentDashboardContext = {
   student: {
     id: string;
     fullName: string;
+    notifyLessonReminders: boolean;
     profile: {
       avatarUrl: string | null;
     } | null;
@@ -83,6 +84,7 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getStudentHome(studentId: string) {
+    const now = new Date();
     const [
       overview,
       nextLesson,
@@ -92,15 +94,24 @@ export class DashboardService {
     ] = await Promise.all([
       this.getStudentOverviewData(studentId),
       this.getStudentNextLessonData(studentId),
-      this.getStudentTodayScheduleData(studentId),
+      this.getStudentTodayScheduleData(studentId, now),
       this.getStudentLearningProgressData(studentId),
       this.getStudentRecentActivityData(studentId),
     ]);
+    const { student, lessons } = await this.getStudentDashboardContext(
+      studentId,
+      now,
+    );
 
     return {
       success: true,
       data: {
         ...overview,
+        alerts: this.buildStudentLessonAlerts(
+          lessons,
+          student.notifyLessonReminders,
+          now,
+        ),
         todaySchedule,
         nextLesson,
         learningProgress,
@@ -670,18 +681,27 @@ export class DashboardService {
     return nextLesson ? this.mapStudentNextLesson(nextLesson) : null;
   }
 
-  private async getStudentTodayScheduleData(studentId: string) {
-    const now = new Date();
+  private async getStudentTodayScheduleData(studentId: string, now = new Date()) {
     const todayStart = this.startOfDay(now);
     const tomorrowStart = this.addDays(todayStart, 1);
-    const { lessons } = await this.getStudentDashboardContext(studentId, now);
+    const { student, lessons } = await this.getStudentDashboardContext(
+      studentId,
+      now,
+    );
 
     return lessons
       .filter(
         (lesson) => lesson.date >= todayStart && lesson.date < tomorrowStart,
       )
       .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .map((lesson) => this.mapStudentScheduleLesson(lesson));
+      .map((lesson) =>
+        this.mapStudentScheduleLesson(
+          lesson,
+          student.notifyLessonReminders &&
+            this.isLessonReminderActive(lesson, now),
+          now,
+        ),
+      );
   }
 
   private async getStudentLearningProgressData(studentId: string) {
@@ -750,6 +770,7 @@ export class DashboardService {
       select: {
         id: true,
         fullName: true,
+        notifyLessonReminders: true,
         profile: {
           select: {
             avatarUrl: true,
@@ -867,7 +888,11 @@ export class DashboardService {
     };
   }
 
-  private mapStudentScheduleLesson(lesson: StudentLesson) {
+  private mapStudentScheduleLesson(
+    lesson: StudentLesson,
+    hasReminderAlert: boolean,
+    now = new Date(),
+  ) {
     return {
       id: lesson.id,
       courseId: lesson.courseId,
@@ -882,7 +907,58 @@ export class DashboardService {
         minute: '2-digit',
       }),
       status: lesson.isCompletedByStudent ? 'completed' : lesson.status,
+      alert: hasReminderAlert
+        ? {
+            type: 'LESSON_REMINDER',
+            title: 'Class starts soon',
+            message: `${lesson.courseTitle} starts in ${this.getMinutesUntilLesson(lesson.startsAt, now)} minutes`,
+          }
+        : null,
     };
+  }
+
+  private buildStudentLessonAlerts(
+    lessons: StudentLesson[],
+    notifyLessonReminders: boolean,
+    now: Date,
+  ) {
+    if (!notifyLessonReminders) {
+      return [];
+    }
+
+    return lessons
+      .filter((lesson) => this.isLessonReminderActive(lesson, now))
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
+      .map((lesson) => ({
+        id: `lesson-reminder-${lesson.id}`,
+        type: 'LESSON_REMINDER',
+        title: 'Class starts soon',
+        message: `${lesson.courseTitle} with ${lesson.tutor.name} starts in ${this.getMinutesUntilLesson(lesson.startsAt, now)} minutes`,
+        startsAt: lesson.startsAt,
+        endsAt: lesson.endsAt,
+        courseId: lesson.courseId,
+        lessonId: lesson.id,
+        targetUrl: '/dashboard/student/today-schedule',
+      }));
+  }
+
+  private isLessonReminderActive(lesson: StudentLesson, now: Date) {
+    if (lesson.isCompletedByStudent || lesson.status !== 'upcoming') {
+      return false;
+    }
+
+    const reminderStartsAt = new Date(
+      lesson.startsAt.getTime() - 30 * 60 * 1000,
+    );
+
+    return now >= reminderStartsAt && now < lesson.startsAt;
+  }
+
+  private getMinutesUntilLesson(startsAt: Date, now: Date) {
+    return Math.max(
+      0,
+      Math.ceil((startsAt.getTime() - now.getTime()) / (60 * 1000)),
+    );
   }
 
   private mapStudentCourseProgress(course: StudentCourse) {

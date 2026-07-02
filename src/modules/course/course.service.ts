@@ -592,7 +592,8 @@ export class CourseService {
       type: 'COURSE_ENROLLMENT',
       title: 'New student enrolled',
       body: `${student.fullName} enrolled in ${course.title}.`,
-      targetUrl: `/classes/${course.id}/enrolled-students`,
+      // targetUrl: `/classes/${course.id}/enrolled-students`,
+        targetUrl:  `/teacher/group-classes/${course.id}`,
       data: {
         enrollmentId: enrollment.id,
         courseId: course.id,

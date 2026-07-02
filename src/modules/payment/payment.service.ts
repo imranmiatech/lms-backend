@@ -2043,7 +2043,8 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
         type: 'COURSE_ENROLLMENT',
         title: 'New student enrolled',
         body: `${payment.user.fullName} enrolled in ${payment.course?.title ?? 'your course'}.`,
-        targetUrl: `/classes/${payment.courseId}/enrolled-students`,
+        // targetUrl: `/classes/${payment.courseId}/enrolled-students`,
+        targetUrl: `/teacher/group-classes/${payment.courseId}`,
         data: {
           paymentId: payment.id,
           courseId: payment.courseId,

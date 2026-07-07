@@ -13,6 +13,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import {
   ApiBody,
   ApiBearerAuth,
@@ -66,11 +67,11 @@ export class ChatController {
     type: CreateConversationResponseDto,
   })
   async createConversation(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: { userId: string; role: Role },
     @Body() dto: CreateConversationDto,
   ) {
     const { conversation, isNew } =
-      await this.chatService.findOrCreateConversation(user.userId, dto);
+      await this.chatService.findOrCreateConversation(user.userId, user.role, dto);
 
     return {
       success: true,
@@ -88,9 +89,10 @@ export class ChatController {
       'Returns all conversations with last message preview and unread count, ordered by most recent.',
   })
   @ApiResponse({ status: 200, description: 'Conversations retrieved.' })
-  async getMyConversations(@CurrentUser() user: { userId: string }) {
+  async getMyConversations(@CurrentUser() user: { userId: string; role: Role }) {
     const conversations = await this.chatService.getMyConversations(
       user.userId,
+      user.role,
     );
     return {
       success: true,
@@ -105,12 +107,13 @@ export class ChatController {
   @ApiResponse({ status: 403, description: 'Not a participant.' })
   @ApiResponse({ status: 404, description: 'Conversation not found.' })
   async getConversation(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: { userId: string; role: Role },
     @Param('conversationId') conversationId: string,
   ) {
     const conversation = await this.chatService.getConversationById(
       conversationId,
       user.userId,
+      user.role,
     );
     return { success: true, data: conversation };
   }
@@ -121,10 +124,10 @@ export class ChatController {
   @ApiParam({ name: 'conversationId', description: 'Conversation UUID' })
   @ApiResponse({ status: 200, description: 'Marked as read.' })
   async markAsRead(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: { userId: string; role: Role },
     @Param('conversationId') conversationId: string,
   ) {
-    await this.chatService.markAsRead(conversationId, user.userId);
+    await this.chatService.markAsRead(conversationId, user.userId, user.role);
     return { success: true, message: 'Conversation marked as read' };
   }
 
@@ -201,7 +204,7 @@ export class ChatController {
     type: MessageResponseDto,
   })
   async sendMessage(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: { userId: string; role: Role },
     @Param('conversationId') conversationId: string,
     @Body() dto: SendMessageDto,
     @UploadedFile() file?: any,
@@ -209,6 +212,7 @@ export class ChatController {
     const message = await this.chatService.sendMessage(
       conversationId,
       user.userId,
+      user.role,
       dto,
       file,
     );
@@ -232,13 +236,14 @@ export class ChatController {
   @ApiParam({ name: 'conversationId', description: 'Conversation UUID' })
   @ApiResponse({ status: 200, description: 'Messages retrieved.' })
   async getMessages(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: { userId: string; role: Role },
     @Param('conversationId') conversationId: string,
     @Query() query: ChatQueryDto,
   ) {
     const result = await this.chatService.getMessages(
       conversationId,
       user.userId,
+      user.role,
       query,
     );
     return { success: true, data: result };
@@ -250,13 +255,14 @@ export class ChatController {
   @ApiResponse({ status: 200, description: 'Message edited.' })
   @ApiResponse({ status: 403, description: 'Not the message sender.' })
   async editMessage(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: { userId: string; role: Role },
     @Param('messageId') messageId: string,
     @Body() dto: EditMessageDto,
   ) {
     const message = await this.chatService.editMessage(
       messageId,
       user.userId,
+      user.role,
       dto,
     );
     return {
@@ -273,10 +279,10 @@ export class ChatController {
   @ApiResponse({ status: 200, description: 'Message deleted.' })
   @ApiResponse({ status: 403, description: 'Not the message sender.' })
   async deleteMessage(
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: { userId: string; role: Role },
     @Param('messageId') messageId: string,
   ) {
-    await this.chatService.deleteMessage(messageId, user.userId);
+    await this.chatService.deleteMessage(messageId, user.userId, user.role);
     return { success: true, message: 'Message deleted successfully' };
   }
 }

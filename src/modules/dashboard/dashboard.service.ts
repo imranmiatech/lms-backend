@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PaymentStatus, PaymentType, Prisma } from '@prisma/client';
+import {
+  ApplicationStatus,
+  PaymentStatus,
+  PaymentType,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
   combineDateAndTime,
@@ -77,6 +82,19 @@ type StudentDashboardContext = {
   }[];
   courses: StudentCourse[];
   lessons: StudentLesson[];
+  favoriteTutors: {
+    id: string;
+    fullName: string;
+    email: string;
+    createdAt: Date;
+    profile: {
+      avatarUrl: string | null;
+      teachingCategory: string | null;
+      pricePerHour: number | null;
+      averageRating: number | null;
+      totalReviews: number;
+    } | null;
+  }[];
 };
 
 @Injectable()
@@ -98,15 +116,14 @@ export class DashboardService {
       this.getStudentLearningProgressData(studentId),
       this.getStudentRecentActivityData(studentId),
     ]);
-    const { student, lessons } = await this.getStudentDashboardContext(
-      studentId,
-      now,
-    );
+    const { student, lessons, favoriteTutors } =
+      await this.getStudentDashboardContext(studentId, now);
 
     return {
       success: true,
       data: {
         ...overview,
+        favoriteTutors: this.mapFavoriteTutors(favoriteTutors),
         alerts: this.buildStudentLessonAlerts(
           lessons,
           student.notifyLessonReminders,
@@ -152,6 +169,15 @@ export class DashboardService {
     return {
       success: true,
       data: await this.getStudentRecentActivityData(studentId),
+    };
+  }
+
+  async getStudentFavoriteTutors(studentId: string) {
+    const { favoriteTutors } = await this.getStudentDashboardContext(studentId);
+
+    return {
+      success: true,
+      data: this.mapFavoriteTutors(favoriteTutors),
     };
   }
 
@@ -628,10 +654,8 @@ export class DashboardService {
     const now = new Date();
     const weekStart = this.startOfWeek(now);
     const nextWeekStart = this.addDays(weekStart, 7);
-    const { student, courses, lessons } = await this.getStudentDashboardContext(
-      studentId,
-      now,
-    );
+    const { student, courses, lessons, favoriteTutors } =
+      await this.getStudentDashboardContext(studentId, now);
     const learnedMinutes = lessons
       .filter((lesson) => lesson.isCompletedByStudent)
       .reduce((total, lesson) => total + lesson.durationMinutes, 0);
@@ -664,6 +688,7 @@ export class DashboardService {
         ).length,
         learnedMinutes,
         thisWeekLearnedHours: Math.round(thisWeekLearnedMinutes / 60),
+        favoriteTutorCount: favoriteTutors.length,
       },
     };
   }
@@ -681,7 +706,10 @@ export class DashboardService {
     return nextLesson ? this.mapStudentNextLesson(nextLesson) : null;
   }
 
-  private async getStudentTodayScheduleData(studentId: string, now = new Date()) {
+  private async getStudentTodayScheduleData(
+    studentId: string,
+    now = new Date(),
+  ) {
     const todayStart = this.startOfDay(now);
     const tomorrowStart = this.addDays(todayStart, 1);
     const { student, lessons } = await this.getStudentDashboardContext(
@@ -834,13 +862,65 @@ export class DashboardService {
     const lessons = courses.flatMap((course) =>
       this.buildStudentCourseLessons(course, now),
     );
+    const favoriteTutors = await this.prisma.studentFavoriteTutor.findMany({
+      where: {
+        studentId,
+        tutor: {
+          role: 'TUTOR',
+          profile: {
+            applicationStatus: ApplicationStatus.APPROVED,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        createdAt: true,
+        tutor: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            profile: {
+              select: {
+                avatarUrl: true,
+                teachingCategory: true,
+                pricePerHour: true,
+                averageRating: true,
+                totalReviews: true,
+              },
+            },
+          },
+        },
+      },
+    });
 
     return {
       student,
       enrollments,
       courses,
       lessons,
+      favoriteTutors: favoriteTutors.map(({ createdAt, tutor }) => ({
+        ...tutor,
+        createdAt,
+      })),
     };
+  }
+
+  private mapFavoriteTutors(
+    favoriteTutors: StudentDashboardContext['favoriteTutors'],
+  ) {
+    return favoriteTutors.map((tutor) => ({
+      tutorId: tutor.id,
+      name: tutor.fullName,
+      email: tutor.email,
+      image: tutor.profile?.avatarUrl ?? null,
+      subject: tutor.profile?.teachingCategory ?? null,
+      pricePerHour: tutor.profile?.pricePerHour ?? null,
+      averageRating: tutor.profile?.averageRating ?? null,
+      totalReviews: tutor.profile?.totalReviews ?? 0,
+      isFavorite: true,
+      favoritedAt: tutor.createdAt,
+    }));
   }
 
   private buildStudentCourseLessons(

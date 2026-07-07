@@ -28,6 +28,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
+    "seed:dummy-tutors": "node scripts/seed-dummy-tutors.js",
     "seed:student-lessons": "node scripts/seed-student-lessons.js",
     "seed:admin-dashboard": "node scripts/seed-admin-dashboard.js",
     "seed:payout-test": "node scripts/seed-payout-test.js",

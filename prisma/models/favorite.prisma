@@ -1,0 +1,12 @@
+model StudentFavoriteTutor {
+  id        String   @id @default(uuid())
+  studentId String
+  tutorId   String
+  createdAt DateTime @default(now())
+  student   User     @relation("StudentFavoriteTutors", fields: [studentId], references: [id], onDelete: Cascade)
+  tutor     User     @relation("TutorFavoritedByStudents", fields: [tutorId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, tutorId])
+  @@index([studentId])
+  @@index([tutorId])
+}

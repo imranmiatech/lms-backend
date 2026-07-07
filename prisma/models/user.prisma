@@ -24,6 +24,8 @@ model User {
   profile               UserProfile?
   payments              Payment[]                 @relation("StudentPayments")
   tutorPayments         Payment[]                 @relation("TutorPayments")
+  favoriteTutors        StudentFavoriteTutor[]    @relation("StudentFavoriteTutors")
+  favoredByStudents     StudentFavoriteTutor[]    @relation("TutorFavoritedByStudents")
   liveClassMessages     LiveClassMessage[]        @relation("LiveClassMessages")
   adminProfile          AdminProfile?
   notifyCourseUpdates   Boolean                   @default(true)

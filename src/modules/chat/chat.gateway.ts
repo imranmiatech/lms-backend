@@ -23,7 +23,7 @@ import type {
   WsSendMessagePayload,
   WsTypingPayload,
 } from './interfaces/chat.interfaces';
-import { MessageType } from '@prisma/client';
+import { MessageType, Role } from '@prisma/client';
 
 interface JwtUserPayload {
   userId: string;
@@ -139,6 +139,7 @@ export class ChatGateway
       await this.chatService.getConversationById(
         payload.conversationId,
         client.user.userId,
+        client.user.role as Role,
       );
       await client.join(payload.conversationId);
       this.logger.log(
@@ -192,6 +193,7 @@ export class ChatGateway
       const message = await this.chatService.sendMessage(
         payload.conversationId,
         client.user.userId,
+        client.user.role as Role,
         {
           content: payload.content,
           messageType: payload.messageType ?? MessageType.TEXT,
@@ -263,6 +265,7 @@ export class ChatGateway
       await this.chatService.markAsRead(
         payload.conversationId,
         client.user.userId,
+        client.user.role as Role,
       );
 
       // Notify other participants that this user has read the messages

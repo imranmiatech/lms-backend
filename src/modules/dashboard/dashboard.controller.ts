@@ -103,4 +103,11 @@ export class DashboardController {
   getStudentRecentActivity(@CurrentUser() user: { userId: string }) {
     return this.dashboardService.getStudentRecentActivity(user.userId);
   }
+
+  @Get('student/favorite-tutors')
+  @Roles(Role.STUDENT)
+  @ApiOperation({ summary: 'Get student dashboard favorite tutors' })
+  getStudentFavoriteTutors(@CurrentUser() user: { userId: string }) {
+    return this.dashboardService.getStudentFavoriteTutors(user.userId);
+  }
 }

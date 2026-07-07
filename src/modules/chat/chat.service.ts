@@ -3,13 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { MessageType, Role } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3StorageService } from '../common/s3/s3.service';
 import { ChatPresenceService } from './chat-presence.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto, EditMessageDto } from './dto/send-message.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
-import { MessageType } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
@@ -29,8 +29,11 @@ export class ChatService {
    */
   async findOrCreateConversation(
     currentUserId: string,
+    role: Role | undefined,
     dto: CreateConversationDto,
   ) {
+    this.assertReadOnlyAdmin(role);
+
     const { participantId } = dto;
 
     if (currentUserId === participantId) {
@@ -122,10 +125,14 @@ export class ChatService {
   /**
    * Get all conversations for a user, ordered by most recent message.
    */
-  async getMyConversations(userId: string) {
+  async getMyConversations(userId: string, role?: Role) {
     const conversations = await this.prisma.conversation.findMany({
       where: {
-        participants: { some: { userId } },
+        ...(role === Role.ADMIN
+          ? {}
+          : {
+              participants: { some: { userId } },
+            }),
       },
       include: {
         participants: {
@@ -157,6 +164,14 @@ export class ChatService {
       orderBy: { updatedAt: 'desc' },
     });
 
+    // Admin can audit all chats without joining them, so unread counts do not apply.
+    if (role === Role.ADMIN) {
+      return conversations.map((conversation) => ({
+        ...this.attachPresenceToConversation(conversation),
+        unreadCount: 0,
+      }));
+    }
+
     // Enrich each conversation with unread count for the current user
     const enriched = await Promise.all(
       conversations.map(async (conv) => {
@@ -185,7 +200,11 @@ export class ChatService {
   /**
    * Get a single conversation by ID — validates that the requester is a participant.
    */
-  async getConversationById(conversationId: string, userId: string) {
+  async getConversationById(
+    conversationId: string,
+    userId: string,
+    role?: Role,
+  ) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {
@@ -206,6 +225,10 @@ export class ChatService {
     });
 
     if (!conversation) throw new NotFoundException('Conversation not found');
+
+    if (role === Role.ADMIN) {
+      return this.attachPresenceToConversation(conversation);
+    }
 
     const isParticipant = conversation.participants.some(
       (p) => p.userId === userId,
@@ -228,9 +251,12 @@ export class ChatService {
   async sendMessage(
     conversationId: string,
     senderId: string,
+    role: Role | undefined,
     dto: SendMessageDto,
     file?: any,
   ) {
+    this.assertReadOnlyAdmin(role);
+
     // Ensure the sender is a participant
     await this._assertParticipant(conversationId, senderId);
 
@@ -295,9 +321,10 @@ export class ChatService {
   async getMessages(
     conversationId: string,
     userId: string,
+    role: Role | undefined,
     query: ChatQueryDto,
   ) {
-    await this._assertParticipant(conversationId, userId);
+    await this._assertReadAccess(conversationId, userId, role);
 
     const limit = query.limit ?? 30;
 
@@ -337,7 +364,14 @@ export class ChatService {
   /**
    * Edit the content of a message. Only the sender can edit.
    */
-  async editMessage(messageId: string, userId: string, dto: EditMessageDto) {
+  async editMessage(
+    messageId: string,
+    userId: string,
+    role: Role | undefined,
+    dto: EditMessageDto,
+  ) {
+    this.assertReadOnlyAdmin(role);
+
     const message = await this._findMessage(messageId);
 
     if (message.senderId !== userId) {
@@ -364,7 +398,13 @@ export class ChatService {
   /**
    * Soft-delete a message. Only the sender can delete.
    */
-  async deleteMessage(messageId: string, userId: string) {
+  async deleteMessage(
+    messageId: string,
+    userId: string,
+    role: Role | undefined,
+  ) {
+    this.assertReadOnlyAdmin(role);
+
     const message = await this._findMessage(messageId);
 
     if (message.senderId !== userId) {
@@ -380,7 +420,13 @@ export class ChatService {
   /**
    * Mark a conversation as read by updating lastReadAt for the current user.
    */
-  async markAsRead(conversationId: string, userId: string) {
+  async markAsRead(
+    conversationId: string,
+    userId: string,
+    role?: Role,
+  ) {
+    this.assertReadOnlyAdmin(role);
+
     await this._assertParticipant(conversationId, userId);
 
     await this.prisma.conversationParticipant.update({
@@ -403,6 +449,33 @@ export class ChatService {
       throw new ForbiddenException('You are not part of this conversation');
     }
     return participant;
+  }
+
+  private async _assertReadAccess(
+    conversationId: string,
+    userId: string,
+    role?: Role,
+  ) {
+    if (role === Role.ADMIN) {
+      const conversation = await this.prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { id: true },
+      });
+
+      if (!conversation) {
+        throw new NotFoundException('Conversation not found');
+      }
+
+      return;
+    }
+
+    await this._assertParticipant(conversationId, userId);
+  }
+
+  private assertReadOnlyAdmin(role?: Role) {
+    if (role === Role.ADMIN) {
+      throw new ForbiddenException('Admins have read-only access to chats');
+    }
   }
 
   private async _findMessage(messageId: string) {

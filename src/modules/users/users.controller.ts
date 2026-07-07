@@ -56,6 +56,20 @@ export class UsersController {
     return this.usersService.findAllTutors(query);
   }
 
+  @Get('student/tutors')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get approved tutors with favorite status for the current student',
+  })
+  getStudentTutors(
+    @CurrentUser() user: { userId: string },
+    @Query() query: TutorQueryDto,
+  ) {
+    return this.usersService.findStudentTutors(user.userId, query);
+  }
+
   @Get('tutors/best-rated')
   @ApiOperation({
     summary: 'Get all approved tutors sorted by best rating first',
@@ -66,6 +80,43 @@ export class UsersController {
   })
   getBestRatedTutors() {
     return this.usersService.findBestRatedTutors();
+  }
+
+  @Get('student/tutors/best-rated')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Get best rated tutors with favorite status for the current student',
+  })
+  getStudentBestRatedTutors(@CurrentUser() user: { userId: string }) {
+    return this.usersService.findStudentBestRatedTutors(user.userId);
+  }
+
+  @Get('student/favorite-tutors')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get the current student favorite tutor list',
+  })
+  getStudentFavoriteTutors(@CurrentUser() user: { userId: string }) {
+    return this.usersService.findAllFavoriteTutors(user.userId);
+  }
+
+  @Patch('student/favorite-tutors/:tutorId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.STUDENT)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Toggle favorite status for a tutor by the current student',
+  })
+  toggleFavoriteTutor(
+    @CurrentUser() user: { userId: string },
+    @Param('tutorId') tutorId: string,
+  ) {
+    return this.usersService.toggleFavoriteTutor(user.userId, tutorId);
   }
 
   @Get('tutor/students')

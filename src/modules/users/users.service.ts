@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
   ApplicationStatus,
@@ -26,7 +30,127 @@ export class UsersService {
   }
 
   async findAllTutors(query: TutorQueryDto = {}) {
-    const [profiles, completedCourses] = await this.prisma.$transaction([
+    return this.buildTutorListResponse(query);
+  }
+
+  async findStudentTutors(studentId: string, query: TutorQueryDto = {}) {
+    await this.assertStudent(studentId);
+    return this.buildTutorListResponse(query, studentId);
+  }
+
+  async findAllFavoriteTutors(studentId: string) {
+    await this.assertStudent(studentId);
+
+    const favorites = await this.prisma.studentFavoriteTutor.findMany({
+      where: {
+        studentId,
+        tutor: {
+          role: Role.TUTOR,
+          profile: {
+            applicationStatus: ApplicationStatus.APPROVED,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        tutor: {
+          include: {
+            profile: true,
+          },
+        },
+      },
+    });
+
+    const tutorIds = favorites.map((favorite) => favorite.tutorId);
+    const completedCourseCountByTutor =
+      await this.getCompletedCourseCountByTutorIds(tutorIds);
+
+    return {
+      success: true,
+      data: favorites.map(({ tutor }) => ({
+        ...tutor,
+        isFavorite: true,
+        profile: tutor.profile
+          ? {
+              ...tutor.profile,
+              completedCoursesCount: completedCourseCountByTutor[tutor.id] ?? 0,
+            }
+          : null,
+      })),
+    };
+  }
+
+  async toggleFavoriteTutor(studentId: string, tutorId: string) {
+    await this.assertStudent(studentId);
+
+    const tutor = await this.prisma.user.findFirst({
+      where: {
+        id: tutorId,
+        role: Role.TUTOR,
+        profile: {
+          applicationStatus: ApplicationStatus.APPROVED,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!tutor) {
+      throw new NotFoundException('Tutor not found');
+    }
+
+    const existingFavorite = await this.prisma.studentFavoriteTutor.findUnique({
+      where: {
+        studentId_tutorId: {
+          studentId,
+          tutorId,
+        },
+      },
+    });
+
+    if (existingFavorite) {
+      await this.prisma.studentFavoriteTutor.delete({
+        where: { id: existingFavorite.id },
+      });
+
+      return {
+        success: true,
+        data: {
+          tutorId,
+          isFavorite: false,
+        },
+      };
+    }
+
+    await this.prisma.studentFavoriteTutor.create({
+      data: {
+        studentId,
+        tutorId,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        tutorId,
+        isFavorite: true,
+      },
+    };
+  }
+
+  async findBestRatedTutors() {
+    return this.buildBestRatedTutorListResponse();
+  }
+
+  async findStudentBestRatedTutors(studentId: string) {
+    await this.assertStudent(studentId);
+    return this.buildBestRatedTutorListResponse(studentId);
+  }
+
+  private async buildTutorListResponse(
+    query: TutorQueryDto = {},
+    studentId?: string,
+  ) {
+    const [profiles, completedCourses] = await Promise.all([
       this.prisma.userProfile.findMany({
         where: this.buildTutorWhere(query),
         include: {
@@ -60,6 +184,9 @@ export class UsersService {
 
     const completedCourseCountByTutor =
       this.getCompletedCourseCountByTutor(completedCourses);
+    const favoriteTutorIds = studentId
+      ? await this.getFavoriteTutorIdSet(studentId)
+      : new Set<string>();
 
     return {
       success: true,
@@ -69,6 +196,7 @@ export class UsersService {
       },
       data: profiles.map(({ user, ...profile }) => ({
         ...user,
+        isFavorite: favoriteTutorIds.has(user.id),
         profile: {
           ...profile,
           completedCoursesCount: completedCourseCountByTutor[user.id] ?? 0,
@@ -77,8 +205,8 @@ export class UsersService {
     };
   }
 
-  async findBestRatedTutors() {
-    const [profiles, completedCourses] = await this.prisma.$transaction([
+  private async buildBestRatedTutorListResponse(studentId?: string) {
+    const [profiles, completedCourses] = await Promise.all([
       this.prisma.userProfile.findMany({
         where: this.buildTutorWhere(),
         include: {
@@ -119,11 +247,15 @@ export class UsersService {
 
     const completedCourseCountByTutor =
       this.getCompletedCourseCountByTutor(completedCourses);
+    const favoriteTutorIds = studentId
+      ? await this.getFavoriteTutorIdSet(studentId)
+      : new Set<string>();
 
     return {
       success: true,
       data: profiles.map(({ user, ...profile }) => ({
         ...user,
+        isFavorite: favoriteTutorIds.has(user.id),
         profile: {
           ...profile,
           completedCoursesCount: completedCourseCountByTutor[user.id] ?? 0,
@@ -211,6 +343,57 @@ export class UsersService {
       },
       {},
     );
+  }
+
+  private async getCompletedCourseCountByTutorIds(tutorIds: string[]) {
+    if (tutorIds.length === 0) {
+      return {};
+    }
+
+    const completedCourses = await this.prisma.courseCompletion.findMany({
+      where: {
+        course: {
+          tutorId: {
+            in: tutorIds,
+          },
+        },
+      },
+      distinct: ['courseId'],
+      select: {
+        course: {
+          select: {
+            tutorId: true,
+          },
+        },
+      },
+    });
+
+    return this.getCompletedCourseCountByTutor(completedCourses);
+  }
+
+  private async getFavoriteTutorIdSet(studentId: string) {
+    const favorites = await this.prisma.studentFavoriteTutor.findMany({
+      where: { studentId },
+      select: {
+        tutorId: true,
+      },
+    });
+
+    return new Set(favorites.map((favorite) => favorite.tutorId));
+  }
+
+  private async assertStudent(studentId: string) {
+    const student = await this.prisma.user.findFirst({
+      where: {
+        id: studentId,
+        role: Role.STUDENT,
+      },
+      select: { id: true },
+    });
+
+    if (!student) {
+      throw new ForbiddenException('Only students can manage favorite tutors');
+    }
   }
 
   async findOne(id: string) {

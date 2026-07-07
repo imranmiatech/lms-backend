@@ -383,7 +383,7 @@ export class StudentLessonsService {
       twoStarCount,
       oneStarCount,
       reviews,
-    ] = await this.prisma.$transaction([
+    ] = await Promise.all([
       this.prisma.review.count(),
       this.prisma.review.aggregate({
         _avg: {
